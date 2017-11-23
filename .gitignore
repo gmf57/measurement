@@ -1,0 +1,25 @@
+#Ignore Emacs autosaves etc.#
+*~
+\#*\#
+.DS_Store
+.sass-cache/
+/org
+_site/
+/Gemfile.lock
+pyshow/
+/code/__pycache__/save.cpython-35.pyc
+.#*
+__pycache__/
+*.DS_Store
+data/tangle-file.txt
+
+#Ignore Images#
+*.gif
+*.svg
+*.ico
+
+#Ignore datasets#
+
+
+#Ignore misc folder#
+/misc

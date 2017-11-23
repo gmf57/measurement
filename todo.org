@@ -1,0 +1,57 @@
+#+STARTUP:
+* TODO list
+- [X] logging in file system
+- [ ] testing nested measurements 
+- [ ] saving
+- [X] printing object config
+- [ ] consistant string formatting for all numbers
+- [ ] metadata
+- [ ] setup in venv
+- [ ] setup git
+- [ ] setup linting
+** Instruments
+- [X] instrument.add() creates the correct property() object automatically
+- [ ] GPIB commuication protocal
+- [X] how to handle parameter change when the rate/min/max/step not set?
+*** Sweeping use cases
+- Care about all of min/max/step/rate -> use sweep
+- Care only about min/max and not step/rate -> use set w/ safe = False. Uses sweep with no check on max/min
+- Care only about step/rate and not min/max -> use set w/ safe = False. Set skips sweep and defaults to set.
+
+So there is no logic inside of property.set - it is all contained in checks on property.safe and the existance of property.max/min/step/rate within sweep and step
+
+Flow:
+- Try to sweep. If it cant't and safe=True then exception
+- If it's a ValueError b/c min/max don't exist and safe=False then sweep anyway.
+- If it's a ValueError b/c rate/step don't exist and safe=Fase then do a direct set (but use the max/min)
+- If safe = False then try to step. If it can't then 
+
+Uses:
+- limits on max/min/step/rate (safe = True
+- sweeping w/o value limits (safe=False, rate/step not None)
+- setting without sweep limits (safe = False, min/max not None)
+- no limits (safe = False)
+
+try: sweep
+except -> one or more of min/max/rate/step not defined
+try: sweep(set_func=self._set)
+except -> one of rate/step not set
+try: _set()
+except -> one of max/min not set
+
+define [max/min] -> fail, fail, pass
+defin [rate/step] -> fail, pass
+** Setup
+- [ ] test re-creating from json
+- [ ] writing to file
+- [ ] loading from file
+** Notes on organization/design
+*** dataclass over attrdict
+- remove dependance on external attrdict
+- dataclass is in main python
+*** refactor measurements/instruments
+- write classes that perform single functions
+- improve flexibility/extensibility
+*** DataSet
+- subclass np.array (there is some subtley here to 
+
