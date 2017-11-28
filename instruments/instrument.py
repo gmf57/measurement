@@ -16,6 +16,7 @@ from measurement.instruments.base import Loadable
 import logging
 log = logging.getLogger(__name__)
 
+
 class Instrument(Loadable):
     def __init__(self, name):
         """
@@ -31,22 +32,20 @@ class Instrument(Loadable):
         setattr(self.__class__, prop.name,
                 property(lambda self: getattr(self, key).get(),
                          lambda self, val: getattr(self, key).set(val)))
-                             
+
     def save(self):
         """Save instrument properties"""
         pass
 
     def __str__(self):
-        return "{0} {1}".format(
-            self.__class__.__name__,
-            self.name)
-            
-    def table(self, prec = 3):
+        return "{0} {1}".format(self.__class__.__name__, self.name)
+
+    def table(self, prec=3):
         """Generate a table representation of the instrument
         """
-        Table.instrument_table(self, prec = prec).build_table()
-        
-            
+        Table.instrument_table(self, prec=prec).build_table()
+
+
 class VisaInstrument(Instrument):
     def __init__(self, name, gpib_address):
         self.name = name
@@ -54,8 +53,8 @@ class VisaInstrument(Instrument):
 
     def add(self, prop, get_command, set_command, units):
         """Add a property to the instrument"""
-        setattr(self, prop, VisaProperty(prop, get_command, set_command,
-                                     units, self))
+        setattr(self, prop,
+                VisaProperty(prop, get_command, set_command, units, self))
 
     def write_raw(self, cmd):
         bytes_written, ret_code = self.visa_handle.write(cmd)
@@ -76,4 +75,3 @@ class VisaInstrument(Instrument):
     def save(self):
         """Save the configuration of the instrument"""
         pass
-            

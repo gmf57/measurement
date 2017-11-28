@@ -6,9 +6,10 @@
 - [X] printing object config
 - [ ] consistant string formatting for all numbers
 - [ ] metadata
-- [ ] setup in venv
-- [ ] setup git
-- [ ] setup linting
+- [X] setup in venv (python 3.6 w/ mypy for type checking)
+- [X] setup git
+- [X] setup linting
+- [ ] config file to set folder where data is saved.
 ** Instruments
 - [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal
@@ -53,5 +54,94 @@ defin [rate/step] -> fail, pass
 - write classes that perform single functions
 - improve flexibility/extensibility
 *** DataSet
-- subclass np.array (there is some subtley here to 
+**** Structure
+- YYYY-mm-dd_HHMMSS <- folder, 
+  - YYYY-mm-dd_HHMMSS_measurement.h5 <- datafile for directly recorded parameters. 
+  - list of sub-measurements <- do I sub-divide them by type? I don't think so.
+- 1x DataArray with dimension matching the parameter-space dimension (as dictated by Sweeps) per parameter per "Measure" instance.
+- 1x Array with dimension matching the parameter-space dimension (as dictated by Sweeps) per Measurement in mlist.
+**** DataArray
+- subclass np.array (there is some subtley here if you need to preserve the functionality of the np.array)
+**** DataSet 
+- A set of DataArray.
+- A you should be able to make a DataSet from a set of DataSet. This allows you to make a DataSet that contains a DataSet for each "measurement task" in the mlist.
+Say that the mlist says do the following @ each point on a grid (e.g. a measurement described by 2 sweeps):
+1. Record temperature, SQUID offset swept back
+2. Do a heightsweep
+3. Do a touchdown
+Then the DataSet would have the following structure:
+***** DataSet
+****** DataSet
+******* temperature
+******* SQUID offset
+****** DataSet
+******* heightsweep filenames <- DataArray?
+****** DataSet
+******* touchdown filenames
+*** Python 3.6 and static type checking
+Using python 3.6 and static type checking allows for mypy to catch errors in scripts before runtime.
+
+Need to figure out how to make typing check for a "base" class, e.g. instances that inerit from Parameter like VisaParameter will work so that List[Parameter] and List[VisaParameter] = List[Parameter]
+** Linting
+*** pylint
+Setup pylint with google python style. This is the best syntax checker apparently - I should only need to use pylint.
+** Measurement
+CNS of the setup. Manages
+- What configurations the setup will take during the measurement
+- What parameters will be recorded @ each configuration
+- Passes data to the DataSet after data is recorded
+*** Measurement classes
+Measurements have the structure 
+
+"do <<something>> @ points in parameter/time space"
+
+However <<something>> can be as simple as recording an instrument parameter or more complicated (do a sweep e.g. a Touchdown grid) or even more complcated (do a scan @ each height, temperature)
+- Measurement base class.
+- Routine that is done @ each point in a multi-dimensional sweep. (Is this always just a sweep)
+**** Some base class
+- Attaches a dataset -> How do you structure the DataSet generically
+- Makes all subclasses callable
+- Has a __str__
+- Can print structure of the measurement
+- Specifies parameter space that is explored
+- Specifies recorded parameters or what is done @ each point in parameter space
+**** Sweep
+- Sweep one parameter
+- Inherits recorded parameters from base class?
+**** Series
+- Created from a list of Sweep
+*** Different measurements
+Check that my measurement can cover all current use cases.
+**** Classes of mesurements
+- Record various parameters as a function of time (cooling curve in transport)
+- Record parameters as a function of
+***** Sweep
+Sweep a single parameter and monitor n different parameters @ each point in the sweep.
+***** 2D Sweep (Series)
+Sweep m different parameters and monitor n different parameters @ each point in the sweep.
+***** Time Series
+Monitor n different parameters as a function of time. Used for spectra and cooling curves
+***** Series
+Do a sweep (or Series) @ different settings.
+**** List of "Procedures"
+And the new class that they can be subclassed from. The idea is that can simply define Sweeps in terms of what you are tuning and what you are monioring:
+- Touchdown (Sweep)
+- Plane (Series) -> Series of Touchdown
+- Linecut (Sweep) 
+- Scan (Series) -> Series of Linecut  
+- Heightsweep (Sweep)
+- IV curves (Sweep)
+- Modulation plots (Series) -> Series of IV
+- FC plots (Series)
+- Spectrum (Time Series)
+- Cooling curve (Time Series)
+- Magnetotransport (Series) -> Series of IV
+Since the single-parameter sweep is a special case of a multi-parameter sweep, my approach is to use a Sweep as something that describes tuning an external knob. You construct a measurement by combining Sweeps (even a single sweep) with a Getter or Measure that tells you what to do at each point in the sweep.
+
+Time measurements don't naturally fall into this system. I should probably make a separate MeasureTime class.
+*** Extensible measurements
+**** Using Getter class
+Allows you to add/remove recorded parameters w/ a 1-liner. Modify recorded attributes on the fly instead of modifying the source of the Procedure.
+
+
 

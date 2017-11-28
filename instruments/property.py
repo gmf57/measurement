@@ -1,16 +1,19 @@
+"""Define a Property - a representation of a single instrument setting.
+
+Each setting on an instrument should be representable as a Property.
+"""
 import sched
 import time
 import math
 import numpy as np
-
 import logging
-log = logging.getLogger(__name__)
-
 import sys
-sys.path.append("/Users/Matt/emacs/testing")
 import measurement
 from measurement.util.printing import Table
 from measurement.instruments.base import Loadable
+
+log = logging.getLogger(__name__)
+
 
 class Property(Loadable):
     """A property of an instrument
@@ -24,8 +27,15 @@ class Property(Loadable):
     The units of Property should be the units that the peice of test
     equipment uses.
     """
-    def __init__(self, name, units, rate=None, step=None,
-                 minimum=None, maximum=None, safe="high"):
+
+    def __init__(self,
+                 name,
+                 units,
+                 rate=None,
+                 step=None,
+                 minimum=None,
+                 maximum=None,
+                 safe="high"):
         """
         Args:
             name (str): Name of the parameter.
@@ -51,7 +61,7 @@ class Property(Loadable):
 
         # Do not specify an instrument until the property is "added"
         self.instrument = None
-        
+
         # Limit what the parameter can be set to
         self.rate = rate
         self.step = step
@@ -62,14 +72,15 @@ class Property(Loadable):
         self.value = 0.0
 
     def __str__(self):
-        return "{} = {:.3f} ({}) on {}.".format(
-            self.name,
-            self.value,
-            self.units,
-            self.instrument)
-    
+        return "{} = {:.3f} ({}) on {}.".format(self.name, self.value,
+                                                self.units, self.instrument)
+
+    def __call__(self):
+        """Make Properties callable for interface with Getter."""
+        return self.get()
+
     def set(self, value):
-        """Safely set the parameter"""
+        """Safely set the parameter."""
         if self.safe == "value":
             self.setter(value)
         elif self.safe == "rate":
@@ -81,36 +92,30 @@ class Property(Loadable):
             self.sweep(value)
 
     def _set(self, value):
-        """Directly set the parameter"""
+        """Directly set the parameter."""
         self.value = value
 
     def get(self):
-        """Read value of parameter"""
+        """Read value of parameter."""
         return self.value
 
     def setter(self, value):
-        """Set the attribute
+        """Set the attribute subject to constraints on the value.
 
         Check to see if the setpoint falls within the limits of allowed
         setpoints. Set the value by safely sweeping with sweep.
 
-        TODO: Should this check that the requsted value doesn't exceed the
-        step? This is in principle done in sweep.
+        Args:
+        value (float): Requested setpoint for self.value
         """
         # Check that the value to write is allowed
         try:
             if value > self.maximum:
-                raise ValueError(
-                    "attempted to set {0} to {1}. {2} is the max".format(
-                        str(self),
-                        value,
-                        self.maximum))
+                raise ValueError("attempted to set {0} to {1}. {2} is the max".
+                                 format(str(self), value, self.maximum))
             if value < self.minimum:
-                raise ValueError(
-                    "attempted to set {0} to {1}. {2} is the min".format(
-                        str(self),
-                        value,
-                        self.minimum))
+                raise ValueError("attempted to set {0} to {1}. {2} is the min".
+                                 format(str(self), value, self.minimum))
         except ValueError as e:
             log.exception(e)
             raise
@@ -120,7 +125,7 @@ class Property(Loadable):
         # If the value is not outside [min, max] then set the value
         self._set(value)
 
-    def sweep(self, val, rate=None, step=None, set_func = None):
+    def sweep(self, val, rate=None, step=None, set_func=None):
         """Sweep the parameter from current value to val
 
         The number of points for the sweep is selected such that the
@@ -146,13 +151,11 @@ class Property(Loadable):
             set_func = self.setter
         try:
             if rate > self.rate:
-                raise ValueError("invalid sweep rate {} on {}".format(
-                    rate,
-                    str(self)))
+                raise ValueError(
+                    "invalid sweep rate {} on {}".format(rate, str(self)))
             if step > self.step:
-                raise ValueError("invalid step size {} on {}".format(
-                    step,
-                    str(self)))
+                raise ValueError(
+                    "invalid step size {} on {}".format(step, str(self)))
         except ValueError as e:
             log.exception(e)
             raise
@@ -162,43 +165,51 @@ class Property(Loadable):
         # Schedule the sweep
         s = sched.scheduler(time.time, time.sleep)
         delay = step / rate
-        [s.enter(delay, 1, set_func, (v,)) for v in vals]
+        [s.enter(delay, 1, set_func, (v, )) for v in vals]
         s.run()
 
     def fmt_prop(self, key, prec=3):
-        """Format a value for priting with units"""
+        """Format a value for priting with units."""
         # Template for adjusting precision of float formatting
         f_fmt = "{{:.{}f}}".format(prec)
 
         # Check if the attr is None
         if getattr(self, key) is None:
             return "None"
-        
+
         # If the attr accepts float formatting then format with the
         # requested precision and with units
         try:
             s = f_fmt.format(getattr(self, key))
-            s += " ({}{})".format(self.units,
-                                  "/s" if key is "rate" else "")
+            s += " ({}{})".format(self.units, "/s" if key is "rate" else "")
             return s
-        
+
         # If the attr does not accept float formatting don't use units.
         except ValueError:
             return "{}".format(getattr(self, key))
 
-    def table(self, prec = 3):
-        """Print a table representation of the property
-        """
-        Table.property_table(self, prec = prec).build_table()
+    def table(self, prec=3):
+        """Print a table representation of the property."""
+        Table.property_table(self, prec=prec).build_table()
+
 
 class VisaProperty(Property):
     """A property that uses Visa to set and read values"""
-    def __init__(self, name, get_command, set_command, units,
-                 rate=None, step=None, minimum=None, maximum=None, safe=True):
+
+    def __init__(self,
+                 name,
+                 get_command,
+                 set_command,
+                 units,
+                 rate=None,
+                 step=None,
+                 minimum=None,
+                 maximum=None,
+                 safe=True):
         """
         """
-        super(VisaProperty, self).__init__(name, units, instrument, rate,
-                                           step, minimum, maximum, safe)
+        super(VisaProperty, self).__init__(name, units, instrument, rate, step,
+                                           minimum, maximum, safe)
         self.get_command = get_command
         self.set_command = set_command
 

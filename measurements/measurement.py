@@ -9,90 +9,144 @@ TODO: Data structure for saving data
 TODO: Save in folders
 TODO: write logging files
 """
+import os
 import math
 import numpy as np
 import time
 import sched
 import itertools
-from datetime import datetime
 import copy
+from typing import Callable, List, Any
 
 import logging
 log = logging.getLogger(__name__)
 
+
 class Measurement:
-    """Measurements must be callable"""
-    def __init__(self, instruments):
-        self.instruments = instruments
+    """Measurements must be callable.
+
+    Should describe the parameter space that is explored as well as the
+    parameters that are recorded during the measurement.
+    """
+
+    def __init__(self, measure):
+        """Create a new measurement from sweeps.
+        
+        Describe a parameter space to explore with sweeps. Describe what 
+        parameters are recorded with measure. Measure can either be a set
+        or parameters to record or another Measurement.
+
+        Args:
+            sweeps (iterable): A set of Sweeps that specifies an
+                n-dimensional parameter space to explore.
+            measure (iterable): A set of callable that specifies what is
+                recorded or what is measured @ each point in sweeps.
+
+        TODO: if you have a Measurement that will run other Measurements,
+        how do you make saving work in a reasonable way?
+        """
+        self.measure = measure
 
     def __str__(self):
-        return "measure"
+        return "{} @ {}".format(self.__class__.name, self.timestamp)
 
     def run(self):
-        pass
+        # Attach an empty, timestamped dataset
+        self.timestamp = datetime.now()
+        self.gen_filename()
+        self.data = DataSet(self)
+
+        # Collect data
+        for c in self.callables:
+            if isinstance(c, Getter):
+                data = c()
+            else:
+                c()
+                pass
+            pass
+
+        # Save
+
+    def gen_filename(self):
+        """Find location for saving data.
+
+        TODO - more robust filename generation (check for existing files)
+        """
+        name = (self.timestamp.strftime("%Y-%m-%d_%H%M%S") + "_" +
+                self.__class__.__name__)
+        if self.folder:
+            self.path = os.path.join(self.folder, name)
+        else:
+            self.path = os.path.join(measurement.data_folder, name)
 
     def __call__(self):
         self.run()
 
-    def save(self):
-        pass
 
+class MeasureSweep(Measurement):
+    """Record parameters while sweeping setting on instruments.
 
-class Series(Measurement):
-    """Execute a list of measurements in a nested fashion"""
-    def __init__(self, mlist, sweeps):
-        """Set up a series of measurements
+    Performs the measurements in mlist at each point in the configuration
+    space specified by set of Sweep in sweeps.
+    """
+
+    def __init__(self, mlist: Sequence[Callable],
+                 sweeps: Sequence[Sweep]) -> None:
+        """Set up a series of measurements.
         
         Args:
             mlist (iterable): generates a sequence of measurements.
             sweeps (list): a list of Sweep.
         """
         self.mlist = mlist
-        self.sweeps = sweeps
-        self.data = []
-        self.callables = self.setup(self.sweeps)        
-        
-    def __str__(self):
-        return "measurement"
-
-    def save(self):
-        """Should save in its own folder"""
-        pass
-
-    def run(self):
-        """Run the measurement series"""
-        # Check if we are have a single sweep or list of sweeps
-        [c() for c in self.callables]
-        
+        if isinstance(sweeps, Sweep):
+            self.sweeps = [sweeps]
+        else:
+            self.sweeps = sweeps
+        self.callables = self.setup(self.sweeps)
 
     def setup(self, sweeps, callables=[]):
-        """Change settings for a single round of measurements"""
-        if type(sweeps) is list:
-            sweep = sweeps[0]
-        else:
-            sweep = sweeps
+        """Test"""
+        sweep = sweeps[0]
         for setting in sweep:
             callables.append(setting)
-            # If len(sweeps) > 1 then there are more parameters to set
-            if sweeps[1:]:
+            try:
                 self.setup(sweeps[1:], callables)
-            # If len(sweeps) = 1 then all parameters are set
-            else:
-                callables +=  [copy.copy(m) for m in self.mlist]
+            except IndexError:
+                callables = callables + [copy.copy(m) for m in self.mlist]
         return callables
-        
-    def measure(self):
-        return [m() for m in self.mlist]
-            
+
     def show(self):
         """Print a diagram of the measurement series"""
         pass
 
-        
-class Setter:
-    """Set an instrument setting
 
-    Makes a callable that utilizes a property's sweeping capabiliy"""
+class MeasureTime(Measurement):
+    """Record a set of parameters periodically over a period of time."""
+
+    def __init__(self, period, time, measure):
+        """
+        """
+        self.period = period
+        self.measure = measure
+        self.time = time
+
+    def setup(self):
+        """Generate a list of callables to execute the measurement."""
+        num = int(self.time / self.period)
+        self.shape = num
+        self.callables = []
+        for i in range(num):
+            self.callables.append(measure)
+            self.callables.append(Wait(self.period))
+
+
+class Setter(object):
+    """Set an instrument setting.
+
+    Makes a callable that utilizes a property's sweeping capabiliy
+    """
+
     def __init__(self, inst, attr, val):
         self.inst = inst
         self.attr = attr
@@ -101,20 +155,72 @@ class Setter:
     def __call__(self):
         """Get the attribute and sweep it to val"""
         logging.info(str(self))
-        getattr(inst, attr).__set__(val)
+        getattr(inst, attr).set(val)
         logging.info("done")
-            
+
     def __str__(self):
         return "set: param {0} to  val {1} on instrument {2}".format(
-            self.attr,
-            self.val,
-            self.inst)
+            self.attr, self.val, self.inst)
 
-class Sweep:
-    """Specify an instrument and values to sweep over
+
+class Getter(object):
+    """Makes a callable that reads a set of parameters from instruments.
+
+    A Getter describes the action of recording a set of parameters. After
+    adjusting parameters in a sweep, calls to the Getter will read data
+    from the instruments.
     """
-    def __init__(self, inst, attr, vals, before=None, after=None, during=None):
-        """Specify an instrument and values to sweep over
+
+    def __init__(self, attrs: List[Callable]):
+        """Instantiate a callable that records attrs.
+        
+        Args:
+            attrs (iterable): Attributes that are recorded on each call
+                to the Getter. Each attr in attrs must be callable
+        """
+        self.attrs = attrs
+
+    def __call__(self):
+        return [attr() for attr in self.attrs]
+
+    def __str__(self):
+        return "{} for {}".format(self.__class__.__name__, self.attrs)
+
+    def units(self):
+        """Read the units for the attrs in the Getter."""
+        return [attr.units for attr in self.attrs]
+
+
+class Wait(object):
+    """Callable waiting."""
+
+    def __init__(self, time):
+        self.time = time
+
+    def __call__(self):
+        time.sleep(self.time)
+
+    def __str__(self):
+        return "{} for {}".format(self.__class__.__name__, self.time)
+
+
+class Sweep(object):
+    """Specify an instrument and values to sweep over.
+
+    Provides an interface for sweeping a tuning parameter on an 
+    instrument over a range of values. Allows a set of callables to be
+    executed before the sweep, after the sweep or at each point in the
+    sweep.
+    """
+
+    def __init__(self,
+                 inst,
+                 attr,
+                 vals,
+                 before: Callable=None,
+                 after: Callable=None,
+                 during: Callable=None) -> None:
+        """Specify an instrument and values to sweep over.
 
         Args:
             inst (Instrument): The instrument that will be swept
@@ -128,11 +234,6 @@ class Sweep:
         self.attr = attr
         self.vals = vals
 
-        # Check that before after and during are callables
-        for action in [before, after, during]:
-            if action is not None and action is not callable:
-                raise TypeError("before, after and durring must be callable")
-
         # Construct a list of callables for the Sweep
         self.setters = []
         if before: self.setters.append(before)
@@ -140,16 +241,11 @@ class Sweep:
             if during: self.setters.append(during)
             self.setters.append(Setter(self.inst, self.attr, val))
         if after: self.setters.append(after)
-         
+
     def __iter__(self):
-        """Make Sweeps iterable"""
+        """Make Sweeps iterable."""
         return (setter for setter in self.setters)
-        
+
     def __str__(self):
         return "sweep {0}: {1} -> {2} on instrument {3}".format(
-            self.attr,
-            self.vals[0],
-            self.vals[-1],
-            self.inst)
-
-
+            self.attr, self.vals[0], self.vals[-1], self.inst)

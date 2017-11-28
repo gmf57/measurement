@@ -22,4 +22,4 @@ data/tangle-file.txt
 
 
 #Ignore misc folder#
-/misc
+/logs
