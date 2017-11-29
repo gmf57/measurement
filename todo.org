@@ -1,15 +1,19 @@
 #+STARTUP:
 * TODO list
 - [X] logging in file system
-- [ ] testing nested measurements 
-- [ ] saving
 - [X] printing object config
-- [ ] consistant string formatting for all numbers
-- [ ] metadata
 - [X] setup in venv (python 3.6 w/ mypy for type checking)
 - [X] setup git
 - [X] setup linting
+- [ ] testing nested measurements 
+- [ ] saving
+- [ ] consistant string formatting for all numbers
+- [ ] metadata
 - [ ] config file to set folder where data is saved.
+- [ ] setup sphinx auto docs
+- [ ] fix pylint config file
+- [ ] stricter autoformatting w/ yapf
+- [ ] write unit tests
 ** Instruments
 - [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal
@@ -50,6 +54,7 @@ defin [rate/step] -> fail, pass
 *** dataclass over attrdict
 - remove dependance on external attrdict
 - dataclass is in main python
+- need to wait for python 3.7
 *** refactor measurements/instruments
 - write classes that perform single functions
 - improve flexibility/extensibility
