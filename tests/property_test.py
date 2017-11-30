@@ -1,5 +1,14 @@
-p1 = Property("a", "V", minimum=-1, maximum=1, rate=.1, step=.1)
-p2 = Property("a", "V", minimum=-1, maximum=1, rate=.1, step=.1, safe = False)
-p3 = Property("a", "V", rate=.1, step=.1, safe = False)
-p4 = Property("a", "V", minimum=-1, maximum = 1, safe = False)
-p5 = Property("a", "V", safe = False)
+import pytest
+from measurement.instruments.property import Propety
+
+class TestProperty(Property):
+    @classmethod
+    def cm(cls, )
+
+    @staticmethod
+
+    @property
+
+# Test that Properties are limited correctly
+
+# Test timing on Property sweep

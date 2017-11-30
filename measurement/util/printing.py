@@ -1,6 +1,5 @@
 """Utilities for printing readable info."""
 
-from measurement.instruments.property import Property
 import sys
 from datetime import datetime
 

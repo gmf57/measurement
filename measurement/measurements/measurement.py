@@ -16,10 +16,102 @@ import time
 import sched
 import itertools
 import copy
-from typing import Callable, List, Any
+from typing import Callable, Sequence
+from measurement.instruments.instrument import Instrument
 
 import logging
 log = logging.getLogger(__name__)
+
+
+class Sweep(object):
+    """Specify an instrument and values to sweep over.
+
+    Provides an interface for sweeping a tuning parameter on an
+    instrument over a range of values. Allows a set of callables to be
+    executed before the sweep, after the sweep or at each point in the
+    sweep.
+
+    TODO - define + for sweeps
+    """
+
+    def __init__(self, attr, setters: Sequence[Callable]) -> None:
+        """Specify an instrument and values to sweep over.
+
+        Args:
+            inst (Instrument): The instrument that will be swept
+            attr (str): The property of inst that will be swept
+            setters (list): List of setters that the Sweep will apply
+        """
+        self.attr = attr
+        self.setters = setters
+
+    def compare(self, other):
+        return self.attr == other.attr
+
+    def __add__(self, other):
+        """Create composite sweeps with + operator.
+        
+        For sweeps to add they must operate on the same instrument
+        parameter."""
+        if not isinstance(other, Sweep):
+            raise NotImplementedError
+        elif self.compare(other):
+            setters = self.setters + other.setters
+            return Setter(self.attr, setters)
+
+    def __mul__(self, other):
+        """Outer product of sweeps."""
+        return Sweep(self.attr + other.attr, self.setters + other.setters)
+
+    def __iter__(self):
+        """Make Sweeps iterable."""
+        return (setter for setter in self.setters)
+
+    def __len__(self):
+        return len(self.setters)
+
+    def append(self, obj: [Callable]) -> None:
+        """Append a Callable to the sweep."""
+        self.setters.append(obj)
+
+    def pop(self, index):
+        """Remove and return the ith setter."""
+        return self.setters.pop(index)
+
+    def reverse(self):
+        """Reverse the sweep direction - in place."""
+        self.setters = self.setters.reverse()
+
+    def __str__(self):
+        return "sweep {0}: {1} -> {2} on instrument {3}".format(
+            self.attr, self.vals[0], self.vals[-1], self.inst)
+
+    @classmethod
+    def sweep(cls,
+              inst: Instrument,
+              attr,
+              vals,
+              before: Callable=None,
+              after: Callable=None,
+              during: Callable=None) -> Any:
+        """
+        Generate a sweep instance from a set of values.
+
+        Args:
+            inst (Instrument): The instrument that will be swept
+            attr (str): The property of inst that will be swept
+            vals (iterable): Values that attr will be set to
+            before (callable): Action to perform before the sweep begins
+            after (callable): Action to perform after sweep ends
+            during (callable): Action to perform between setting vals
+        """
+        setters = []
+        if before: setters.append(before)
+        for val in vals:
+            if during: setters.append(during)
+            setters.append(Setter(inst, attr, val))
+        if after: setters.append(after)
+        return cls([attr], [setters])
 
 
 class Measurement:
@@ -90,8 +182,7 @@ class MeasureSweep(Measurement):
     space specified by set of Sweep in sweeps.
     """
 
-    def __init__(self, mlist: Sequence[Callable],
-                 sweeps: Sequence[Sweep]) -> None:
+    def __init__(self, mlist: Sequence[Callable], sweep: Sweep) -> None:
         """Set up a series of measurements.
         Args:
             mlist (iterable): generates a sequence of measurements.
@@ -158,8 +249,7 @@ class Setter(object):
         logging.info("done")
 
     def __str__(self):
-        return "set: param {0} to  val {1} on instrument {2}".format(
-            self.attr, self.val, self.inst)
+        return "set: param {} to {.3f}".format(self.attr, self.val)
 
 
 class Getter(object):
@@ -201,110 +291,3 @@ class Wait(object):
 
     def __str__(self):
         return "{} for {}".format(self.__class__.__name__, self.time)
-
-
-class Sweep(object):
-    """Specify an instrument and values to sweep over.
-
-    Provides an interface for sweeping a tuning parameter on an
-    instrument over a range of values. Allows a set of callables to be
-    executed before the sweep, after the sweep or at each point in the
-    sweep.
-
-    TODO - define + for sweeps
-    """
-
-    def __init__(self, inst, attr, setters: Sequence[Callable]) -> None:
-        """Specify an instrument and values to sweep over.
-
-        Args:
-            inst (Instrument): The instrument that will be swept
-            attr (str): The property of inst that will be swept
-            setters (list): List of setters that the Sweep will apply
-        """
-        self.inst = inst
-        self.attr = attr
-        self.setters = setters
-
-    def compare(self, other):
-        return self.inst == other.inst and self.attr == other.attr
-
-    def __add__(self, other):
-        """Create composite sweeps with + operator.
-        
-        For sweeps to add they must operate on the same instrument
-        parameter."""
-        if not isinstance(other, Sweep):
-            raise NotImplementedError
-        elif self.compare(other):
-            setters = self.setters + other.setters
-            return Setter(self.inst, self.attr, setters)
-
-    def __mult__(self, other):
-        """Outer product of sweeps."""
-        args = []
-        for attr in ["inst", "attr", "setters"]:
-            args.append(list(itertools.product(self.attr, other.attr)))
-        return Sweep(*args)
-
-    def __iter__(self):
-        """Make Sweeps iterable."""
-        return (setter for setter in self.setters)
-
-    def __len__(self):
-        return len(self.setters)
-
-    def append(self, obj):
-        self.setters.append(obj)
-
-    def count(self):
-        pass
-
-    def index(self):
-        pass
-
-    def extend(self):
-        pass
-
-    def insert(self, obj):
-        pass
-
-    def pop(self):
-        pass
-
-    def remove(self):
-        pass
-
-    def reverse(self):
-        pass
-
-    def __str__(self):
-        return "sweep {0}: {1} -> {2} on instrument {3}".format(
-            self.attr, self.vals[0], self.vals[-1], self.inst)
-
-    @classmethod
-    def sweep(cls,
-              inst: Instrument,
-              attr,
-              vals,
-              before: Callable=None,
-              after: Callable=None,
-              during: Callable=None) -> Sweep:
-        """
-        Generate a sweep instance from a set of values.
-
-        Args:
-            inst (Instrument): The instrument that will be swept
-            attr (str): The property of inst that will be swept
-            vals (iterable): Values that attr will be set to
-            before (callable): Action to perform before the sweep begins
-            after (callable): Action to perform after sweep ends
-            during (callable): Action to perform between setting vals
-        """
-        setters = []
-        if before: setters.append(before)
-        for val in vals:
-            if during: setters.append(during)
-            setters.append(Setter(inst, attr, val))
-        if after: setters.append(after)
-        return cls(inst, attr, setters)

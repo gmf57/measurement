@@ -14,6 +14,7 @@
 - [ ] fix pylint config file
 - [ ] stricter autoformatting w/ yapf
 - [ ] write unit tests
+- [ ] figure out how to make portable conda package 
 ** Instruments
 - [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal
@@ -50,6 +51,7 @@ defin [rate/step] -> fail, pass
 - [ ] test re-creating from json
 - [ ] writing to file
 - [ ] loading from file
+- [ ] maybe a sorted dict so all setups of similar measurements look the same
 ** Notes on organization/design
 *** dataclass over attrdict
 - remove dependance on external attrdict
