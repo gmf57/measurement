@@ -7,7 +7,6 @@ import time
 import math
 import logging
 import numpy as np
-from measurement.util.printing import Table
 from measurement.instruments.base import Loadable
 
 log = logging.getLogger(__name__)
@@ -185,9 +184,10 @@ class Property(Loadable):
         except ValueError:
             return "{}".format(getattr(self, key))
 
+    """
     def table(self, prec=3):
-        """Print a table representation of the property."""
         Table.property_table(self, prec=prec).build_table()
+    """
 
 
 class VisaProperty(Property):
