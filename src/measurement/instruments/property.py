@@ -6,6 +6,7 @@ import sched
 import time
 import math
 import logging
+import operator
 import numpy as np
 from measurement.instruments.base import Loadable
 
@@ -75,17 +76,44 @@ class Property(Loadable):
         """Make Properties callable for interface with Getter."""
         return self.get()
 
-    def set(self, value):
-        """Safely set the parameter."""
-        if self.safe == "value":
-            self.setter(value)
-        elif self.safe == "rate":
-            self.sweep(value, set_func=self._set)
-        elif self.safe == "none":
-            self._set(value)
-        # Default to maximum safety in setting parameters
-        else:
-            self.sweep(value)
+    def set(self, value, rate=None, step=None):
+        """Try to set the parameter as safely as possible.
+
+        Use available data to find the safest way to set the value. There
+        are 4 different cases:
+        - min/max/rate/step all set (value and sweep rate matters)
+        - only min/max is set (value but not sweep rate matters)
+        - only rate/step is set (sweep rate but not value matters)
+        - none of min/max/rate/step are set (no limits on setting value)
+        """
+        # Raise a ValueError if value is not in [minimum, maximum]
+        try:
+            self.value_check("minimum", value, operator.ge)
+            self.value_check("maximum", value, operator.le)
+        except TypeError:
+            # Value limits are not set
+            pass
+        finally:
+            # Raise a ValueError if rate/step are set too high
+            try:
+                self.value_check("rate", rate, operator.le)
+                self.value_check("step", step, operator.le)
+            except TypeError:
+                # Rate limits are not set - directly set the parameter
+                self._set(value)
+            else:
+                # Rate limits are set - sweep the value safely
+                self.sweep(value, rate, step)
+
+    def value_check(self, attr, val, op):
+        """Verify that requested parameter is within limits."""
+        try:
+            if op(val, getattr(self, attr)):
+                raise ValueError("attempted to set {} to {:.3f}. {} is limit.".
+                                 format(attr, val, getattr(self, attr)))
+        except ValueError as message:
+            log.exception(message)
+            raise
 
     def _set(self, value):
         """Directly set the parameter."""
@@ -95,33 +123,7 @@ class Property(Loadable):
         """Read value of parameter."""
         return self.value
 
-    def setter(self, value):
-        """Set the attribute subject to constraints on the value.
-
-        Check to see if the setpoint falls within the limits of allowed
-        setpoints. Set the value by safely sweeping with sweep.
-
-        Args:
-        value (float): Requested setpoint for self.value
-        """
-        # Check that the value to write is allowed
-        try:
-            if value > self.maximum:
-                raise ValueError("attempted to set {0} to {1}. {2} is the max".
-                                 format(str(self), value, self.maximum))
-            if value < self.minimum:
-                raise ValueError("attempted to set {0} to {1}. {2} is the min".
-                                 format(str(self), value, self.minimum))
-        except ValueError as e:
-            log.exception(e)
-            raise
-        except TypeError as e:
-            log.exception(e)
-            raise
-        # If the value is not outside [min, max] then set the value
-        self._set(value)
-
-    def sweep(self, val, rate=None, step=None, set_func=None):
+    def sweep(self, val, rate=None, step=None):
         """Sweep the parameter from current value to val
 
         The number of points for the sweep is selected such that the
@@ -136,32 +138,19 @@ class Property(Loadable):
             val (float): value of the parameter to sweep to
             rate (float): rate (unit/s) to sweep parameter
             step (float): maximum step size of parameter during sweep
-            set_func (function): function used to set the value
         """
         # Check that requsted rate does not exceed limit
         if not rate:
             rate = self.rate
         if not step:
             step = self.step
-        if not set_func:
-            set_func = self.setter
-        try:
-            if rate > self.rate:
-                raise ValueError(
-                    "invalid sweep rate {} on {}".format(rate, str(self)))
-            if step > self.step:
-                raise ValueError(
-                    "invalid step size {} on {}".format(step, str(self)))
-        except ValueError as e:
-            log.exception(e)
-            raise
         # Define the values that are swept over
         num = math.ceil(np.abs(self.value - val) / step)
         vals = np.linspace(self.value, val, num)
         # Schedule the sweep
         s = sched.scheduler(time.time, time.sleep)
         delay = step / rate
-        _ = [s.enter(delay, 1, set_func, (v, )) for v in vals]
+        _ = [s.enter(delay, 1, self._set, (v, )) for v in vals]
         s.run()
 
     def fmt_prop(self, key, prec=3):
