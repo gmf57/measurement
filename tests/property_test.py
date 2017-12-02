@@ -1,5 +1,6 @@
 import pytest
 from measurement.instruments.property import Property
+from datetime import datetime
 
 
 class TestProperty(object):
@@ -12,6 +13,8 @@ class TestProperty(object):
         "step": 0.2,
         "minimum": -1,
         "maximum": 1
+    }, {
+        "maximum": 1
     }]
 
     @pytest.fixture(params=param_dict)
@@ -21,6 +24,10 @@ class TestProperty(object):
 
     @pytest.fixture
     def setup_single(self):
+        return Property("test", "A.U.", 0.1, 0.1, -1, 1)
+
+    @pytest.fixture
+    def timing_test(self):
         return Property("test", "A.U.", 0.1, 0.1, -1, 1)
 
     def test_setting(self, setup_single):
@@ -39,13 +46,27 @@ class TestProperty(object):
 
     def test_rate_limits(self, setup):
         """Test that rate/step are limited on sweeping."""
-        pass
+        if setup.step and setup.rate:
+            with pytest.raises(ValueError):
+                setup.set(-0.5, rate=setup.rate + 1)
 
-    # Test timing on property sweep
+    def test_step_limits(self, setup_single):
+        """Test that limits on step work."""
+        if setup_single.step and setup_single.rate:
+            with pytest.raises(ValueError):
+                setup_single.set(0.5, step=setup_single.step + 1)
 
-    # Test that properties are callable
+    def test_sweep_timing(self, timing_test):
+        """Test that sweep rate is at least slower than requested rate."""
+        start = datetime.now()
+        timing_test.set(1)
+        delta = datetime.now() - start
+        expected = 1 / timing_test.rate
+        assert delta.total_seconds() > expected
+
     def test_callable(self, setup_single):
-        assert hasattr(setup, "__call__")
+        """Test that Properties are callable for reading value."""
+        assert setup_single() == setup_single.value
 
     # Test that properties are written to/from json
     def test_json(self, setup):
@@ -55,6 +76,8 @@ class TestProperty(object):
         assert setup.__dict__ == copy.__dict__
 
     # Test that value is /not/ written during load
+
+    # Test that the logic in set is correct
 
 
 class TestVisaProperty(object):

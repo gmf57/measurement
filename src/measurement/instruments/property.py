@@ -86,34 +86,29 @@ class Property(Loadable):
         - only rate/step is set (sweep rate but not value matters)
         - none of min/max/rate/step are set (no limits on setting value)
         """
-        # Raise a ValueError if value is not in [minimum, maximum]
-        try:
-            self.value_check("minimum", value, operator.ge)
-            self.value_check("maximum", value, operator.le)
-        except TypeError:
-            # Value limits are not set
-            pass
-        finally:
-            # Raise a ValueError if rate/step are set too high
-            try:
-                self.value_check("rate", rate, operator.le)
-                self.value_check("step", step, operator.le)
-            except TypeError:
-                # Rate limits are not set - directly set the parameter
-                self._set(value)
-            else:
-                # Rate limits are set - sweep the value safely
-                self.sweep(value, rate, step)
+        # Raise a ValueError if the requseted value is restrited
+        self.lim_check(value)
+        # Use sweep if enough parmeters are set
+        if self.rate and self.step:
+            self.sweep(value, rate, step)
+        else:
+            self._set(value)
 
-    def value_check(self, attr, val, op):
+    def value_check(self, op, val, attr):
         """Verify that requested parameter is within limits."""
         try:
-            if op(val, getattr(self, attr)):
-                raise ValueError("attempted to set {} to {:.3f}. {} is limit.".
-                                 format(attr, val, getattr(self, attr)))
+            if not op(val, getattr(self, attr)):
+                raise ValueError("{:.3f} violates limit on {}. {} is limit.".
+                                 format(val, attr, getattr(self, attr)))
         except ValueError as message:
             log.exception(message)
             raise
+
+    def lim_check(self, val):
+        if self.minimum:
+            self.value_check(operator.ge, val, "minimum")
+        if self.maximum:
+            self.value_check(operator.le, val, "maximum")
 
     def _set(self, value):
         """Directly set the parameter."""
@@ -140,18 +135,19 @@ class Property(Loadable):
             step (float): maximum step size of parameter during sweep
         """
         # Check that requsted rate does not exceed limit
-        if not rate:
-            rate = self.rate
-        if not step:
-            step = self.step
+        if not rate: rate = self.rate
+        if not step: step = self.step
+        self.value_check(operator.le, rate, "rate")
+        self.value_check(operator.le, step, "step")
+
         # Define the values that are swept over
         num = math.ceil(np.abs(self.value - val) / step)
         vals = np.linspace(self.value, val, num)
-        # Schedule the sweep
-        s = sched.scheduler(time.time, time.sleep)
         delay = step / rate
-        _ = [s.enter(delay, 1, self._set, (v, )) for v in vals]
-        s.run()
+        # Run the sweep
+        for val in vals:
+            self._set(val)
+            time.sleep(delay)
 
     def fmt_prop(self, key, prec=3):
         """Format a value for priting with units."""

@@ -23,3 +23,6 @@ data/tangle-file.txt
 
 #Ignore misc folder#
 /logs
+
+#Ignore pytest
+tests/.cache
