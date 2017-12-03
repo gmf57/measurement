@@ -48,7 +48,7 @@ except -> one of max/min not set
 define [max/min] -> fail, fail, pass
 defin [rate/step] -> fail, pass
 ** Setup
-- [ ] test re-creating from json
+- [X] test re-creating from json
 - [ ] writing to file
 - [ ] loading from file
 - [ ] maybe a sorted dict so all setups of similar measurements look the same
@@ -92,12 +92,12 @@ Need to figure out how to make typing check for a "base" class, e.g. instances t
 ** Linting
 *** pylint
 Setup pylint with google python style. This is the best syntax checker apparently - I should only need to use pylint.
-** Measurement
-CNS of the setup. Manages
-- What configurations the setup will take during the measurement
-- What parameters will be recorded @ each configuration
-- Passes data to the DataSet after data is recorded
-*** Measurement classes
+** Classes 
+*** Measurement
+Contains:
+- Description of parameter space (what configuration the setup should take) 
+- Tasks (a list of things to do @ each point in parameter space)
+**** Measurement classes
 Measurements have the structure 
 
 "do <<something>> @ points in parameter/time space"
@@ -105,32 +105,32 @@ Measurements have the structure
 However <<something>> can be as simple as recording an instrument parameter or more complicated (do a sweep e.g. a Touchdown grid) or even more complcated (do a scan @ each height, temperature)
 - Measurement base class.
 - Routine that is done @ each point in a multi-dimensional sweep. (Is this always just a sweep)
-**** Some base class
+***** Some base class
 - Attaches a dataset -> How do you structure the DataSet generically
 - Makes all subclasses callable
 - Has a __str__
 - Can print structure of the measurement
 - Specifies parameter space that is explored
 - Specifies recorded parameters or what is done @ each point in parameter space
-**** Sweep
+***** Sweep
 - Sweep one parameter
 - Inherits recorded parameters from base class?
-**** Series
+***** Series
 - Created from a list of Sweep
-*** Different measurements
+**** Different measurements
 Check that my measurement can cover all current use cases.
-**** Classes of mesurements
+***** Classes of mesurements
 - Record various parameters as a function of time (cooling curve in transport)
 - Record parameters as a function of
-***** Sweep
+****** Sweep
 Sweep a single parameter and monitor n different parameters @ each point in the sweep.
-***** 2D Sweep (Series)
+****** 2D Sweep (Series)
 Sweep m different parameters and monitor n different parameters @ each point in the sweep.
-***** Time Series
+****** Time Series
 Monitor n different parameters as a function of time. Used for spectra and cooling curves
-***** Series
+****** Series
 Do a sweep (or Series) @ different settings.
-**** List of "Procedures"
+***** List of "Procedures"
 And the new class that they can be subclassed from. The idea is that can simply define Sweeps in terms of what you are tuning and what you are monioring:
 - Touchdown (Sweep)
 - Plane (Series) -> Series of Touchdown
@@ -146,9 +146,12 @@ And the new class that they can be subclassed from. The idea is that can simply 
 Since the single-parameter sweep is a special case of a multi-parameter sweep, my approach is to use a Sweep as something that describes tuning an external knob. You construct a measurement by combining Sweeps (even a single sweep) with a Getter or Measure that tells you what to do at each point in the sweep.
 
 Time measurements don't naturally fall into this system. I should probably make a separate MeasureTime class.
-*** Extensible measurements
-**** Using Getter class
+**** Extensible measurements
+***** Using Getter class
 Allows you to add/remove recorded parameters w/ a 1-liner. Modify recorded attributes on the fly instead of modifying the source of the Procedure.
-
-
-
+*** Sweep
+Describes adjusting a single parameter. Contains:
+- The parameter that is adjusted
+- What values the parameter can take
+Generates:
+- A set of "callables" can set the equipment to the specified configurations.

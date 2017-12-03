@@ -68,7 +68,6 @@ class TestProperty(object):
         """Test that Properties are callable for reading value."""
         assert setup_single() == setup_single.value
 
-    # Test that properties are written to/from json
     def test_json(self, setup):
         """Verify that a Property can be written and recovered with json."""
         json = setup.to_json()

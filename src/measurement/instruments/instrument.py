@@ -15,10 +15,45 @@ from measurement.instruments.base import Loadable
 log = logging.getLogger(__name__)
 
 
-class Instrument(Loadable):
-    """Describes the configuration of a single Instrument."""
+class InstrumentNew(Loadable):
+    """Describes the configuratio of a single Instrument.
 
-    def add(self, prop):
+    To read/write the Property you use
+    instrument.setting()
+    >>> 5
+    instrument.setting(10)
+    instrument.setting()
+    >>> 10
+
+    Cleaner code but more tedious than InstrumentOld below @ command line
+    """
+
+    def add(self, prop: Property) -> None:
+        setattr(self, prop.name, prop)
+
+    def __str__(self):
+        return "{0} {1}".format(self.__class__.__name__, self.name)
+
+    def table(self, prec=3):
+        """Generate a table representation of the instrument
+        """
+        Table.instrument_table(self, prec=prec).build_table()
+
+
+class Instrument(Loadable):
+    """Describes the configuration of a single Instrument.
+    Uses a hack to let the get/set methods of Property manage the 
+    descriptor.
+
+    This allows: 
+    instrument.setting
+    >>> 5
+    instrument.setting = 10
+    instrument.setting
+    >>> 10
+    """
+
+    def add(self, prop: Property) -> None:
         """Add a property to the instrument"""
         key = "_" + prop.name
         setattr(self, key, prop)
@@ -26,10 +61,6 @@ class Instrument(Loadable):
         setattr(self.__class__, prop.name,
                 property(lambda self: getattr(self, key).get(),
                          lambda self, val: getattr(self, key).set(val)))
-
-    def save(self):
-        """Save instrument properties"""
-        pass
 
     def __str__(self):
         return "{0} {1}".format(self.__class__.__name__, self.name)

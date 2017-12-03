@@ -153,26 +153,18 @@ class Property(Loadable):
         """Format a value for priting with units."""
         # Template for adjusting precision of float formatting
         f_fmt = "{{:.{}f}}".format(prec)
-
         # Check if the attr is None
         if getattr(self, key) is None:
             return "None"
-
         # If the attr accepts float formatting then format with the
         # requested precision and with units
         try:
             s = f_fmt.format(getattr(self, key))
             s += " ({}{})".format(self.units, "/s" if key is "rate" else "")
             return s
-
         # If the attr does not accept float formatting don't use units.
         except ValueError:
             return "{}".format(getattr(self, key))
-
-    """
-    def table(self, prec=3):
-        Table.property_table(self, prec=prec).build_table()
-    """
 
 
 class VisaProperty(Property):
