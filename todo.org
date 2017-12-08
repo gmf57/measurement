@@ -14,7 +14,8 @@
 - [ ] fix pylint config file
 - [ ] stricter autoformatting w/ yapf
 - [ ] write unit tests
-- [ ] figure out how to make portable conda package 
+- [ ] figure out how to make portable conda package
+- [ ] use slots on mass-produced objects
 ** Instruments
 - [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal

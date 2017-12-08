@@ -1,6 +1,8 @@
 """Define a Property - a representation of a single instrument setting.
 
 Each setting on an instrument should be representable as a Property.
+
+Write a lookup table style property
 """
 import sched
 import time
@@ -13,8 +15,8 @@ from measurement.instruments.base import Loadable
 log = logging.getLogger(__name__)
 
 
-class Property(Loadable):
-    """A property of an instrument
+class Param(Loadable):
+    """A single Parmeter on an Instrument
 
     This is a generic interface between settings on an Instrument and
     code. Allows richer interaction than simple @property since arbitrary
@@ -31,8 +33,7 @@ class Property(Loadable):
                  rate=None,
                  step=None,
                  minimum=None,
-                 maximum=None,
-                 safe="high"):
+                 maximum=None):
         """
         Args:
             name (str): Name of the parameter.
@@ -48,23 +49,15 @@ class Property(Loadable):
                 single command.
             minimum (float): Minimum value the parameter may be set to.
             maximum (float): Maximum value the parameter may be set to.
-            safe (str): Sets rules for setting the parameter. Values are
-                can be ["high", "rate", "value", "none"]
         """
+        super(Param, self).__init__(name)
         # Info about the property
-        self.name = name
         self.units = units
-        self.safe = safe
-
-        # Do not specify an instrument until the property is "added"
-        self.instrument = None
-
         # Limit what the parameter can be set to
         self.rate = rate
         self.step = step
         self.maximum = maximum
         self.minimum = minimum
-
         # Temporary have a "value" until real visa interface is implemented
         self.value = 0.0
 
@@ -73,7 +66,6 @@ class Property(Loadable):
                                                 self.units, self.instrument)
 
     def __call__(self):
-        """Make Properties callable for interface with Getter."""
         return self.get()
 
     def set(self, value, rate=None, step=None):
@@ -105,6 +97,7 @@ class Property(Loadable):
             raise
 
     def lim_check(self, val):
+        """Verify that the requested value falls within minimum and maximum."""
         if self.minimum:
             self.value_check(operator.ge, val, "minimum")
         if self.maximum:
@@ -167,7 +160,44 @@ class Property(Loadable):
             return "{}".format(getattr(self, key))
 
 
-class VisaProperty(Property):
+class DiscreteParam(Loadable):
+    """A parameter that takes on a small set of hardware-defined values."""
+
+    def __init__(self, name, values):
+        """
+        Args:
+            values (list): values that the Param can take
+        """
+        super(DiscreteParam, self).__init__(name)
+        self.values = values
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        """If possible sets the range to the nearest value.
+
+        If setting is str-like then it require matches."""
+        try:
+            closest = min(self.values, key=lambda x: abs(x - value))
+        except TypeError:
+            self._set(value)
+        else:
+            self._set(closest)
+
+    def _set(self, value):
+        try:
+            if value not in self.values:
+                raise ValueError(
+                    "setpoint {} not in lookup table".format(value))
+        except ValueError as message:
+            log.exception(message)
+            raise
+        else:
+            self.value = value
+
+
+class VisaProperty(Loadable):
     """A property that uses Visa to set and read values"""
 
     def __init__(self,

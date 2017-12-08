@@ -1,19 +1,39 @@
-import unittest
+import pytest
+from measurement.instruments.drivers.test_instrument import FakeInstrument
+from measurement.instruments.param import Param
 
 
-class TestProperty(unittest.TestCase):
-    def setUp(self):
-        p = Property(
-            name="test", units="V", rate=0.2, step=0.1, minimum=-1, maximum=1)
+class TestInstrument(object):
+    @pytest.fixture
+    def setup(self):
+        return (FakeInstrument("test1"), FakeInstrument("test2"))
 
-    def test_rate_limiting(self):
-        """Test that sweep rate is limited by step size and sweep rate."""
-        pass
+    def test_setting(self, setup):
+        """Verify that setting works like a descriptor."""
+        setup[0].V = 1
+        assert setup[0].V == 1
 
-    def test_value_limit(self):
-        """Verify that the value of the Property is lmited."""
+    def test_different_values(self, setup):
+        """Test that two instruments can have different Param values."""
+        setup[0].V = 0
+        setup[1].V = 1
+        assert setup[0].V == 0
+        assert setup[1].V == 1
 
-    def test_partial_limiting(self):
-        """Verify that properties ony a few of min/max/rate/step
-        defined still impose constraints - if possible.
-        """
+    def test_different_limits(self, setup):
+        """Test that instruments can have different limist on the Param"""
+        setup[0]._V.minimum = -1
+        setup[0]._V.maximum = 1
+        setup[1].V = 2
+        assert setup[1].V == 2
+
+    def test_param_update(self, setup):
+        """Test that changes to the param settings work."""
+        setup[0]._V.minimum = -1
+        setup[0]._V.maximum = 1
+        with pytest.raises(ValueError):
+            setup[0].V = 2
+
+    def test_param_access(self, setup):
+        """Check that the underlying Params can be accessed."""
+        assert type(setup[0]._V) is Param

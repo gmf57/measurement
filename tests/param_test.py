@@ -1,9 +1,9 @@
 import pytest
-from measurement.instruments.property import Property
+from measurement.instruments.param import Param, DiscreteParam
 from datetime import datetime
 
 
-class TestProperty(object):
+class TestContinuousParam(object):
     # Define properties with different constraints.
     param_dict = [{
         "minimum": -1,
@@ -20,15 +20,15 @@ class TestProperty(object):
     @pytest.fixture(params=param_dict)
     def setup(self, request):
         """Generate Property instances with different configuration."""
-        return Property("test", "A.U.", **request.param)
+        return Param("test", "A.U.", **request.param)
 
     @pytest.fixture
     def setup_single(self):
-        return Property("test", "A.U.", 0.1, 0.1, -1, 1)
+        return Param("test", "A.U.", 0.1, 0.1, -1, 1)
 
     @pytest.fixture
     def timing_test(self):
-        return Property("test", "A.U.", 0.1, 0.1, -1, 1)
+        return Param("test", "A.U.", 0.1, 0.1, -1, 1)
 
     def test_setting(self, setup_single):
         """Test that values can be set."""
@@ -71,12 +71,44 @@ class TestProperty(object):
     def test_json(self, setup):
         """Verify that a Property can be written and recovered with json."""
         json = setup.to_json()
-        copy = Property.from_json(json)
+        copy = Param.from_json(json)
         assert setup.__dict__ == copy.__dict__
 
-    # Test that value is /not/ written during load
 
-    # Test that the logic in set is correct
+class TestDiscreteParam(object):
+    @pytest.fixture
+    def setup_str(self):
+        """Test parameters with string settings."""
+        return DiscreteParam("test", ["a", "b", "c"])
+
+    @pytest.fixture
+    def setup_numeric(self):
+        """Test Discrete Parameters with numeric settings."""
+        return DiscreteParam("test", [1, 2, 3])
+
+    def test_setting(self, setup_numeric, setup_str):
+        """Test setting numeric and string-like discrete parameters."""
+        setup_numeric.set(3)
+        assert setup_numeric.value == 3
+        setup_str.set("a")
+        assert setup_str.value == "a"
+
+    def test_nearest(self, setup_numeric):
+        """Test setting with value outside the accepted values.
+        
+        DiscreteParams with numeric settings should set to the value
+        closest to the requested value. DiscretParams with string settings
+        will raise an exception.
+        """
+        setup_numeric.set(4)
+        assert setup_numeric.value == 3
+
+    def test_str_limits(self, setup_str):
+        """DiscreteParams with str settings allow only expected values."""
+        with pytest.raises(ValueError):
+            setup_str.set(5)
+        with pytest.raises(ValueError):
+            setup_str.set("d")
 
 
 class TestVisaProperty(object):
@@ -84,4 +116,4 @@ class TestVisaProperty(object):
     def setup(self):
         pass
 
-    # Test that Visa iterface works
+    # Test that Visa interface

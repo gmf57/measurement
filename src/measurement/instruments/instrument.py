@@ -1,59 +1,21 @@
 """
 Writing VisaInstrument interface. For now worry just about visa instruments
 handle other interfaces later
-
-TODO: Detect value errors before run
-TODO: Think about automatically using a "simple" setter if limits are not
-defined
 """
 
 import logging
-from measurement.instruments.property import Property
+from measurement.instruments.param import Param
 from measurement.util.printing import Table
 from measurement.instruments.base import Loadable
 
 log = logging.getLogger(__name__)
 
 
-class InstrumentNew(Loadable):
-    """Describes the configuratio of a single Instrument.
-
-    To read/write the Property you use
-    instrument.setting()
-    >>> 5
-    instrument.setting(10)
-    instrument.setting()
-    >>> 10
-
-    Cleaner code but more tedious than InstrumentOld below @ command line
-    """
-
-    def add(self, prop: Property) -> None:
-        setattr(self, prop.name, prop)
-
-    def __str__(self):
-        return "{0} {1}".format(self.__class__.__name__, self.name)
-
-    def table(self, prec=3):
-        """Generate a table representation of the instrument
-        """
-        Table.instrument_table(self, prec=prec).build_table()
-
-
 class Instrument(Loadable):
     """Describes the configuration of a single Instrument.
-    Uses a hack to let the get/set methods of Property manage the 
-    descriptor.
-
-    This allows: 
-    instrument.setting
-    >>> 5
-    instrument.setting = 10
-    instrument.setting
-    >>> 10
     """
 
-    def add(self, prop: Property) -> None:
+    def add(self, prop: Param) -> None:
         """Add a property to the instrument"""
         key = "_" + prop.name
         setattr(self, key, prop)
