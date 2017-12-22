@@ -51,7 +51,7 @@ class Loadable(object):
         # Use inspect to get the signature
         sig = inspect.signature(cls)
         # Use the json data to bind arguments to the signature
-        ba = sig.bind(*[data[key] for key in sig.parameters.keys()])
+        ba = sig.bind(* [data[key] for key in sig.parameters.keys()])
         # Use the bound args to instantiate the object
         return cls(*ba.args, **ba.kwargs)
 
@@ -66,7 +66,7 @@ class Loadable(object):
         sig = inspect.signature(cls)
         # Make the object
         data = json["properties"]  # can i do this w/o assuming keys?
-        ba = sig.bind(*[data[key] for key in sig.parameters.keys()])
+        ba = sig.bind(* [data[key] for key in sig.parameters.keys()])
         obj = cls(*ba.args, **ba.kwargs)
         # Set parameters not set in init
         for key in data.keys():

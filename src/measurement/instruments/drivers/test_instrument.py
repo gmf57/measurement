@@ -1,5 +1,3 @@
-import sys
-sys.path.append("/Users/Matt/emacs/testing")
 from measurement.instruments.instrument import Instrument
 from measurement.instruments.param import Param
 

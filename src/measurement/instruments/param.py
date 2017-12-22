@@ -4,7 +4,6 @@ Each setting on an instrument should be representable as a Property.
 
 Write a lookup table style property
 """
-import sched
 import time
 import math
 import logging
@@ -34,22 +33,28 @@ class Param(Loadable):
                  step=None,
                  minimum=None,
                  maximum=None):
-        """
-        Args:
-            name (str): Name of the parameter.
-            get_command (str): String Visa uses to get parameter.
-            set_command (str): String Visa uses to set parameter.
-            units (str): Unit for the parameter. Should be units that the
-                relevant instrument uses.
+        """Create a continuous instrument parameter.
 
-        Kwargs:
-            rate (float): Maximum rate of change (units/second) for the
-                 parameter.
-            step (float): Maximum ammount param can be changed in a
-                single command.
-            minimum (float): Minimum value the parameter may be set to.
-            maximum (float): Maximum value the parameter may be set to.
+        The value and adjustment of the parameter is controlled by the
+        limitations placed on it with minimum/maximum/rate/step.
+
+        Parameters
+        ----------
+        name : str
+            Should have only one Param with a given name per instrument.
+        units : str
+            Units that the Param is measured in.
+        rate : float
+            Maximum rate of change of the Param in (units/second).
+        step : float
+            Maximum step size when the parameter is adjusted.
+        minimum : float
+            Minimum value of the parameter.
+        maximum : float
+            Maximum value of the parameter.
+
         """
+
         super(Param, self).__init__(name)
         # Info about the property
         self.units = units
@@ -62,21 +67,26 @@ class Param(Loadable):
         self.value = 0.0
 
     def __str__(self):
-        return "{} = {:.3f} ({}) on {}.".format(self.name, self.value,
-                                                self.units, self.instrument)
+        return "<<{}: {}>>".format(self.__class__.__name__, self.name)
+
+    def __repr__(self):
+        return str(self)
 
     def __call__(self):
         return self.get()
 
     def set(self, value, rate=None, step=None):
-        """Try to set the parameter as safely as possible.
+        """Adjust the parameter as safely as possible.
 
-        Use available data to find the safest way to set the value. There
-        are 4 different cases:
-        - min/max/rate/step all set (value and sweep rate matters)
-        - only min/max is set (value but not sweep rate matters)
-        - only rate/step is set (sweep rate but not value matters)
-        - none of min/max/rate/step are set (no limits on setting value)
+        Parameters
+        ----------
+        value : float
+            Value to set parameter to.
+        rate : float
+            Sweep rate of parameter.
+        step : float
+            Step size of parameter during sweep.
+
         """
         # Raise a ValueError if the requseted value is restrited
         self.lim_check(value)
@@ -87,7 +97,24 @@ class Param(Loadable):
             self._set(value)
 
     def value_check(self, op, val, attr):
-        """Verify that requested parameter is within limits."""
+        """Raise an exception if a limit on a parameter is violated.
+
+        Parameters
+        ----------
+        op : function
+            Operator comparing value and attribute (e.g. operator.ge)
+        val : float
+            Requested value.
+        attr : str
+            Key to get the corresponding limit on the property.
+
+        Raises
+        ------
+        ValueError
+            if val exceeds a limitation when compared to self.attr
+
+        """
+
         try:
             if not op(val, getattr(self, attr)):
                 raise ValueError("{:.3f} violates limit on {}. {} is limit.".
@@ -97,7 +124,13 @@ class Param(Loadable):
             raise
 
     def lim_check(self, val):
-        """Verify that the requested value falls within minimum and maximum."""
+        """Verify that parameter setpoint falls within minimum and maximum.
+
+        Parameters
+        ----------
+        val : float
+            Value to compare to minimum and maximum.
+        """
         if self.minimum:
             self.value_check(operator.ge, val, "minimum")
         if self.maximum:
@@ -112,7 +145,7 @@ class Param(Loadable):
         return self.value
 
     def sweep(self, val, rate=None, step=None):
-        """Sweep the parameter from current value to val
+        """Continuously adjust the parameter.
 
         The number of points for the sweep is selected such that the
         maximum step size is not exceeded. The rate of the sweep is
@@ -212,8 +245,8 @@ class VisaProperty(Loadable):
                  safe=True):
         """
         """
-        super(VisaProperty, self).__init__(name, units, instrument, rate, step,
-                                           minimum, maximum, safe)
+        super(VisaProperty, self).__init__(name, units, rate, step, minimum,
+                                           maximum, safe)
         self.get_command = get_command
         self.set_command = set_command
 

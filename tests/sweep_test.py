@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
-from measurement.measurements.measurement import Sweep
+from measurement.measurements.calllist import Sweep
 from measurement.instruments.drivers.test_instrument import InstrumentTest
 
 
 class TestSweep(object):
     @pytest.fixture
     def setup(self):
-        ti = InstrumentTest("test")
+        ti = FakeInstrument("test")
         s1 = Sweep(ti._V, np.linspace(0, 1, 10))
         s2 = Sweep(ti._I, np.linspace(0, 1, 10))
         s3 = Sweep(ti._V, np.linspace(1, 2, 10))

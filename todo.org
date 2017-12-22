@@ -1,21 +1,72 @@
 #+STARTUP:
 * TODO list
+* Organization
+- [X] setup git
+- [X] setup linting
+- [X] setup pylint/flycheck
+- [ ] standardize docstrings
+- [ ] setup sphinx auto docs
+- [ ] fix pylint config file
+- [ ] write unit tests
+- [ ] figure out how to make portable conda package
+** Linting
+*** pylint
+Setup pylint with google python style. This is the best syntax checker apparently - I should only need to use pylint.
+** Docstring convention
+The docstring convention should:
+- be supported by Sphinx out of the box
+- be consistant with what is used by other scientific codebases
+- be compatible with pyment (docstring conversion/generation tool) out of the box.
+- be compatible with pydocstyle (docstring style checking tool) out of the box.
+I'm picking numpydoc. The only thing that comes close is the google style.
+* Features
 - [X] logging in file system
 - [X] printing object config
 - [X] setup in venv (python 3.6 w/ mypy for type checking)
-- [X] setup git
-- [X] setup linting
+- [X] use slots on mass-produced objects
+- [X] stricter autoformatting w/ yapf (not possible)
 - [ ] testing nested measurements 
 - [ ] saving
 - [ ] consistant string formatting for all numbers
 - [ ] metadata
 - [ ] config file to set folder where data is saved.
-- [ ] setup sphinx auto docs
-- [ ] fix pylint config file
-- [ ] stricter autoformatting w/ yapf
-- [ ] write unit tests
-- [ ] figure out how to make portable conda package
-- [ ] use slots on mass-produced objects
+** Notes on design
+*** dataclass over attrdict
+- remove dependance on external attrdict
+- dataclass is in main python
+- need to wait for python 3.7
+*** refactor measurements/instruments
+- write classes that perform single functions
+- improve flexibility/extensibility
+*** DataSet
+**** Structure
+- YYYY-mm-dd_HHMMSS <- folder, 
+  - YYYY-mm-dd_HHMMSS_measurement.h5 <- datafile for directly recorded parameters. 
+  - list of sub-measurements <- do I sub-divide them by type? I don't think so.
+- 1x DataArray with dimension matching the parameter-space dimension (as dictated by Sweeps) per parameter per "Measure" instance.
+- 1x Array with dimension matching the parameter-space dimension (as dictated by Sweeps) per Measurement in mlist.
+**** DataArray
+- subclass np.array (there is some subtley here if you need to preserve the functionality of the np.array)
+**** DataSet 
+- A set of DataArray.
+- A you should be able to make a DataSet from a set of DataSet. This allows you to make a DataSet that contains a DataSet for each "measurement task" in the mlist.
+Say that the mlist says do the following @ each point on a grid (e.g. a measurement described by 2 sweeps):
+1. Record temperature, SQUID offset swept back
+2. Do a heightsweep
+3. Do a touchdown
+Then the DataSet would have the following structure:
+***** DataSet
+****** DataSet
+******* temperature
+******* SQUID offset
+****** DataSet
+******* heightsweep filenames <- DataArray?
+****** DataSet
+******* touchdown filenames
+*** Python 3.6 and static type checking
+Using python 3.6 and static type checking allows for mypy to catch errors in scripts before runtime.
+
+Need to figure out how to make typing check for a "base" class, e.g. instances that inerit from Parameter like VisaParameter will work so that List[Parameter] and List[VisaParameter] = List[Parameter]
 ** Instruments
 - [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal
@@ -53,46 +104,6 @@ defin [rate/step] -> fail, pass
 - [ ] writing to file
 - [ ] loading from file
 - [ ] maybe a sorted dict so all setups of similar measurements look the same
-** Notes on organization/design
-*** dataclass over attrdict
-- remove dependance on external attrdict
-- dataclass is in main python
-- need to wait for python 3.7
-*** refactor measurements/instruments
-- write classes that perform single functions
-- improve flexibility/extensibility
-*** DataSet
-**** Structure
-- YYYY-mm-dd_HHMMSS <- folder, 
-  - YYYY-mm-dd_HHMMSS_measurement.h5 <- datafile for directly recorded parameters. 
-  - list of sub-measurements <- do I sub-divide them by type? I don't think so.
-- 1x DataArray with dimension matching the parameter-space dimension (as dictated by Sweeps) per parameter per "Measure" instance.
-- 1x Array with dimension matching the parameter-space dimension (as dictated by Sweeps) per Measurement in mlist.
-**** DataArray
-- subclass np.array (there is some subtley here if you need to preserve the functionality of the np.array)
-**** DataSet 
-- A set of DataArray.
-- A you should be able to make a DataSet from a set of DataSet. This allows you to make a DataSet that contains a DataSet for each "measurement task" in the mlist.
-Say that the mlist says do the following @ each point on a grid (e.g. a measurement described by 2 sweeps):
-1. Record temperature, SQUID offset swept back
-2. Do a heightsweep
-3. Do a touchdown
-Then the DataSet would have the following structure:
-***** DataSet
-****** DataSet
-******* temperature
-******* SQUID offset
-****** DataSet
-******* heightsweep filenames <- DataArray?
-****** DataSet
-******* touchdown filenames
-*** Python 3.6 and static type checking
-Using python 3.6 and static type checking allows for mypy to catch errors in scripts before runtime.
-
-Need to figure out how to make typing check for a "base" class, e.g. instances that inerit from Parameter like VisaParameter will work so that List[Parameter] and List[VisaParameter] = List[Parameter]
-** Linting
-*** pylint
-Setup pylint with google python style. This is the best syntax checker apparently - I should only need to use pylint.
 ** Classes 
 *** Measurement
 Contains:
@@ -156,3 +167,5 @@ Describes adjusting a single parameter. Contains:
 - What values the parameter can take
 Generates:
 - A set of "callables" can set the equipment to the specified configurations.
+** Metaclases
+A property is a /class/ attribute (by definition). So if we want the same

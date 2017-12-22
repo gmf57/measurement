@@ -6,9 +6,7 @@ can be collected in np.arrays in cast to DataSet with the np.array view
 feature. DataSets can also be directly instantiated during collection.
 """
 from git import Repo
-from datetime import datetime
 import numpy as np
-import measurement
 
 
 class DataSet(object):
@@ -18,68 +16,66 @@ class DataSet(object):
     """
 
     def __init__(self, measurement):
-        pass
+        self.measurement = measurement
 
     def __str__(self):
-        return "{} {}".format(self.__class__.__name__, self.name)
+        return "{} {}".format(self.__class__.__name__, self.filename)
+
+    def __repr__(self):
+        return str(self)
 
     def add(self, data_array, name=None):
-        """Add a data_set to the DataArray
+        """Add a DataArray to the DataSet
         """
-        try:
-            setattr(self, name, data_array)
-        except TypeError:
+        # Re-name data_array in place so the names always match
+        if name:
+            data_array.name = name
+        if hasattr(self, data_array.name):
+            raise AttributeError("{} {} already has an attribute {}".format(
+                self.__class__.__name__, self.name, data_array.name))
+        else:
             setattr(self, data_array.name, data_array)
 
     def save(self, formatter):
         """Use the formatter to write a file."""
         pass
 
-    def gen_filename(self, folder=None):
-        """Find location for saving data.
-
-        TODO - more robust filename generation (check for existing files)
-        """
-        name = (self.timestamp.strftime("%Y-%m-%d_%H%M%S") + "_" +
-                self.__class__.__name__)
-        try:
-            self.path.os.path.join(folder, name)
-        except TypeError:
-            self.path = os.path.join(measurement.data_folder, name)
+    @property
+    def filename(self):
+        """Inherit the filename from the parent Measurement."""
+        if hasattr(self.measurement, "filename"):
+            return self.measurement.filename
 
     @classmethod
-    def from_measurement(cls, measurement, getter):
-        """Create a dataset storing filenames from a Measurement series."""
-        data_set = cls(measurement)
-
-    @classmethod
-    def from_getter(cls, getter):
+    def from_getter(cls, measurement, getter):
         """Create a dataset designed to store parameters in a Getter."""
-        data_set = cls()
+        data_set = cls(measurement)
         for attr in getter.attrs:
             data_set.add(
                 DataArray(
-                    np.full(measurement.shape, np.nana), attr.name,
-                    attr.units))
+                    np.full(measurement.shape, np.nan), attr.name, attr.units))
         return data_set
 
 
 class DataArray(np.ndarray):
-    """Store data from a single measured parameter. 
+    """Store data from a single measured parameter.
 
-    Behaves like an ndarray with a name and units parameter.    
+    Behaves like an ndarray with a name and units parameter.
     """
 
-    def __new__(cls, input_array, name=None, units=None):
+    def __new__(cls, input_array, name=None, units=None, dataset=None):
         """
         Args:
             input_array (array): Array to be cast to DataSet type
             name (str): Name of the DataSet
             units (str): Units of the data stored in the DataSet
+            dataset (DataSet): Collection of data that the DataArray is a
+                member of.
         """
         obj = np.asarray(input_array).view(cls)
         obj.name = name
         obj.units = units
+        obj.dataset = dataset
         return obj
 
     def __array_finalize__(self, obj):
@@ -88,7 +84,18 @@ class DataArray(np.ndarray):
         self.units = getattr(obj, "units", None)
 
     def __str__(self):
-        return "{}: {}".format(self.__class__.__name__, self.name)
+        return "<<{}: {} ({}) from {}\n{}>>".format(
+            self.__class__.__name__, self.name, self.units, self.filename,
+            np.array2string(self))
+
+    def __repr__(self):
+        return str(self)
+
+    @property
+    def filename(self):
+        """Read filename from parent DataSet."""
+        if hasattr(self, "parent"): return getattr(self.parent, "filename")
+        else: return None
 
 
 class Metadata(object):
@@ -108,7 +115,7 @@ class Metadata(object):
         """Initialize Metadata object.
         """
         self.git_info()
-        self.set_time()
+        self.get_setup()
 
     def git_info(self):
         """Get git info.
@@ -117,15 +124,12 @@ class Metadata(object):
         self.git_hash = repo.git.log("-1", "--format=%H")
         self.git_diff = repo.git.diff()
 
-    def set_time(self):
-        """Set metadata timestamp.
-        """
-        self.timestamp = datetime.datetime.now()
-
     def get_setup(self):
         """Get info about setup.
         """
         pass
 
     def write(self):
+        """Write a human-readable metadata file.
+        """
         pass
