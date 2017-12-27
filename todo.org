@@ -68,9 +68,9 @@ Using python 3.6 and static type checking allows for mypy to catch errors in scr
 
 Need to figure out how to make typing check for a "base" class, e.g. instances that inerit from Parameter like VisaParameter will work so that List[Parameter] and List[VisaParameter] = List[Parameter]
 ** Instruments
-- [X] instrument.add() creates the correct property() object automatically
 - [ ] GPIB commuication protocal
 - [X] how to handle parameter change when the rate/min/max/step not set?
+- [ ] a method to access the descriptor object with my new implementation.
 *** Sweeping use cases
 - Care about all of min/max/step/rate -> use sweep
 - Care only about min/max and not step/rate -> use set w/ safe = False. Uses sweep with no check on max/min
@@ -99,6 +99,11 @@ except -> one of max/min not set
 
 define [max/min] -> fail, fail, pass
 defin [rate/step] -> fail, pass
+*** Different Param implementations
+1. Descriptors (class variables) manages the value (instance variable) using constraints (instance variable) -> You
+2. Instruments inherit from a class that allow instance-variable implementation of the descriptor protocal. -> This is the "cleanest" solution.
+3. Dynamically create descriptors that manage values in instance-variable classes (what I had previously) -> causes confusing modification of class variables.
+I'm going with option 2. It minimizes the number of objects and their complexity. I don't thing there will be a problem with attribute access on the instruments - but that's the only thing that could go wrong.
 ** Setup
 - [X] test re-creating from json
 - [ ] writing to file
@@ -167,5 +172,10 @@ Describes adjusting a single parameter. Contains:
 - What values the parameter can take
 Generates:
 - A set of "callables" can set the equipment to the specified configurations.
-** Metaclases
-A property is a /class/ attribute (by definition). So if we want the same
+** Documentation
+*** Instrumentation
+The idea is to make objects from the ground up starting with a "Param" (the lowest-level object that interfaces directly with VISA). Instruments are composed of "Params" and a "Setup" is a collection of instruments.
+**** Param
+*** Measurement
+  
+

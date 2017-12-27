@@ -1,13 +1,9 @@
-"""Define a Property - a representation of a single instrument setting.
-
-Each setting on an instrument should be representable as a Property.
-
-Write a lookup table style property
+"""Define a Param - a representation of a single setting on an instrument.
 """
+import operator
 import time
 import math
 import logging
-import operator
 import numpy as np
 from measurement.instruments.base import Loadable
 
@@ -15,136 +11,85 @@ log = logging.getLogger(__name__)
 
 
 class Param(Loadable):
-    """A single Parmeter on an Instrument
-
-    This is a generic interface between settings on an Instrument and
-    code. Allows richer interaction than simple @property since arbitrary
-    features may exist in the Property class. Features include:
-        1. Units
-        2. Limits on max/min values, sweep rates, and step sizes
-    The units of Property should be the units that the peice of test
-    equipment uses.
+    """
     """
 
-    def __init__(self,
-                 name,
-                 units,
-                 rate=None,
-                 step=None,
-                 minimum=None,
-                 maximum=None):
-        """Create a continuous instrument parameter.
+    def __init__(self, name):
+        self.name = name
+        self.value = None
 
-        The value and adjustment of the parameter is controlled by the
-        limitations placed on it with minimum/maximum/rate/step.
+    def _setup(self):
+        """Write instance specific data needed to manage the value.
 
-        Parameters
-        ----------
-        name : str
-            Should have only one Param with a given name per instrument.
-        units : str
-            Units that the Param is measured in.
-        rate : float
-            Maximum rate of change of the Param in (units/second).
-        step : float
-            Maximum step size when the parameter is adjusted.
-        minimum : float
-            Minimum value of the parameter.
-        maximum : float
-            Maximum value of the parameter.
+        For continuous params it sets limits for discrete params it
+        specifies allowed values"""
+        raise NotImplementedError
 
+    def __get__(self, instance, owner):
         """
+        """
+        if instance is None:
+            return self
+        return self.value
 
-        super(Param, self).__init__(name)
-        # Info about the property
-        self.units = units
-        # Limit what the parameter can be set to
-        self.rate = rate
-        self.step = step
-        self.maximum = maximum
-        self.minimum = minimum
-        # Temporary have a "value" until real visa interface is implemented
-        self.value = 0.0
+    def __set__(self, instance, value):
+        """Should validate then set."""
+        raise NotImplementedError
 
     def __str__(self):
-        return "<<{}: {}>>".format(self.__class__.__name__, self.name)
+        return "<<{} {}>>".format(self.__class__.__name__, self.name)
 
     def __repr__(self):
         return str(self)
 
-    def __call__(self):
-        return self.get()
 
-    def set(self, value, rate=None, step=None):
-        """Adjust the parameter as safely as possible.
+class ContinuousParam(Param):
+    """Param use cases
 
-        Parameters
-        ----------
-        value : float
-            Value to set parameter to.
-        rate : float
-            Sweep rate of parameter.
-        step : float
-            Step size of parameter during sweep.
+    Impose limits on parameter values - look in a dict on the instrument to get
+    the right limits.
+    Variable rate sweeping. Use a bunch of sweep rate that do not exceed the
+    master sweep rate -> implement a sweep that adjusts the sweep rate limits.
+    """
 
-        """
-        # Raise a ValueError if the requseted value is restrited
-        self.lim_check(value)
-        # Use sweep if enough parmeters are set
-        if self.rate and self.step:
-            self.sweep(value, rate, step)
+    def __init__(self,
+                 name,
+                 units=None,
+                 minimum=None,
+                 maximum=None,
+                 rate=None,
+                 step=None):
+        super(ContinuousParam, self).__init__(name)
+        self.units = units
+        self.minimum = minimum
+        self.maximum = maximum
+        self.rate = rate
+        self.step = step
+
+    def __set__(self, instance, value):
+        self._check_limits(value)
+        if self.step and self.rate:
+            self.sweep(value, instance, None)
         else:
-            self._set(value)
+            self._set(instance, value)
 
-    def value_check(self, op, val, attr):
-        """Raise an exception if a limit on a parameter is violated.
-
-        Parameters
-        ----------
-        op : function
-            Operator comparing value and attribute (e.g. operator.ge)
-        val : float
-            Requested value.
-        attr : str
-            Key to get the corresponding limit on the property.
-
-        Raises
-        ------
-        ValueError
-            if val exceeds a limitation when compared to self.attr
-
-        """
-
-        try:
-            if not op(val, getattr(self, attr)):
-                raise ValueError("{:.3f} violates limit on {}. {} is limit.".
-                                 format(val, attr, getattr(self, attr)))
-        except ValueError as message:
-            log.exception(message)
-            raise
-
-    def lim_check(self, val):
-        """Verify that parameter setpoint falls within minimum and maximum.
-
-        Parameters
-        ----------
-        val : float
-            Value to compare to minimum and maximum.
-        """
-        if self.minimum:
-            self.value_check(operator.ge, val, "minimum")
-        if self.maximum:
-            self.value_check(operator.le, val, "maximum")
-
-    def _set(self, value):
-        """Directly set the parameter."""
+    def _set(self, instance, value):
+        """Directly adjust the paramter without checking limits."""
         self.value = value
 
-    def get(self):
-        """Read value of parameter."""
-        return self.value
+    def value_check(self, op, val, attr):
+        if not op(val, getattr(self, attr)):
+            raise ValueError(
+                "{:.3f} violates limit on {}. Limit is set to {:.3f}".format(
+                    val, attr, getattr(self, attr)))
 
-    def sweep(self, val, rate=None, step=None):
+    def _check_limits(self, value):
+        if self.minimum:
+            self.value_check(operator.ge, value, "minimum")
+        if self.maximum:
+            self.value_check(operator.le, value, "maximum")
+
+    def sweep(self, value, instance, owner):
         """Continuously adjust the parameter.
 
         The number of points for the sweep is selected such that the
@@ -160,40 +105,18 @@ class Param(Loadable):
             rate (float): rate (unit/s) to sweep parameter
             step (float): maximum step size of parameter during sweep
         """
-        # Check that requsted rate does not exceed limit
-        if not rate: rate = self.rate
-        if not step: step = self.step
-        self.value_check(operator.le, rate, "rate")
-        self.value_check(operator.le, step, "step")
-
         # Define the values that are swept over
-        num = math.ceil(np.abs(self.value - val) / step)
-        vals = np.linspace(self.value, val, num)
-        delay = step / rate
+        start = self.__get__(instance, owner)
+        num = math.ceil(np.abs(start - value) / self.step)
+        vals = np.linspace(start, value, num)
+        delay = self.step / self.rate
         # Run the sweep
         for val in vals:
-            self._set(val)
+            self._set(instance, val)
             time.sleep(delay)
 
-    def fmt_prop(self, key, prec=3):
-        """Format a value for priting with units."""
-        # Template for adjusting precision of float formatting
-        f_fmt = "{{:.{}f}}".format(prec)
-        # Check if the attr is None
-        if getattr(self, key) is None:
-            return "None"
-        # If the attr accepts float formatting then format with the
-        # requested precision and with units
-        try:
-            s = f_fmt.format(getattr(self, key))
-            s += " ({}{})".format(self.units, "/s" if key is "rate" else "")
-            return s
-        # If the attr does not accept float formatting don't use units.
-        except ValueError:
-            return "{}".format(getattr(self, key))
 
-
-class DiscreteParam(Loadable):
+class DiscreteParam(Param):
     """A parameter that takes on a small set of hardware-defined values."""
 
     def __init__(self, name, values):
@@ -204,10 +127,7 @@ class DiscreteParam(Loadable):
         super(DiscreteParam, self).__init__(name)
         self.values = values
 
-    def get(self):
-        return self.value
-
-    def set(self, value):
+    def __set__(self, instance, value):
         """If possible sets the range to the nearest value.
 
         If setting is str-like then it require matches."""
@@ -228,30 +148,3 @@ class DiscreteParam(Loadable):
             raise
         else:
             self.value = value
-
-
-class VisaProperty(Loadable):
-    """A property that uses Visa to set and read values"""
-
-    def __init__(self,
-                 name,
-                 get_command,
-                 set_command,
-                 units,
-                 rate=None,
-                 step=None,
-                 minimum=None,
-                 maximum=None,
-                 safe=True):
-        """
-        """
-        super(VisaProperty, self).__init__(name, units, rate, step, minimum,
-                                           maximum, safe)
-        self.get_command = get_command
-        self.set_command = set_command
-
-        def get(self):
-            return self.instrument.ask(get_command)
-
-        def _set(self):
-            self.instrument.write(set_command)

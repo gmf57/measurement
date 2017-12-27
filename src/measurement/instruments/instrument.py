@@ -12,25 +12,59 @@ log = logging.getLogger(__name__)
 
 
 class Instrument(Loadable):
-    """Describes the configuration of a single Instrument.
-    """
-
-    def add(self, prop: Param) -> None:
-        """Add a property to the instrument"""
-        key = "_" + prop.name
-        setattr(self, key, prop)
-        # Construct a property that uses the get/set methods defined in prop
-        setattr(self.__class__, prop.name,
-                property(lambda self: getattr(self, key).get(),
-                         lambda self, val: getattr(self, key).set(val)))
+    def __init__(self, name):
+        self.name = name
 
     def __str__(self):
-        return "{0} {1}".format(self.__class__.__name__, self.name)
+        return "<<{} {}>>".format(self.__class__.__name__, self.name)
 
-    def table(self, prec=3):
-        """Generate a table representation of the instrument
-        """
-        Table.instrument_table(self, prec=prec).build_table()
+    def __repr__(self):
+        return str(self)
+
+    def __delattr__(self, name):
+        res = self.__dict__.get(name)
+        for method in ('__get__', '__set__', '__delete__'):
+            if hasattr(res, method):
+                # If the attribute implements a descriptor protocol, use it.
+                res = res.__delete__(name)
+                break
+        else:
+            res = object.__delattr__(self, name)
+        return res
+
+    def __getattribute__(self, *args):
+        res = object.__getattribute__(self, *args)
+        for method in ('__get__', '__set__', '__delete__'):
+            if hasattr(res, method):
+                # we have a descriptor, call it
+                res = res.__get__(self, self.__class__)
+        return res
+
+    def __setattr__(self, name, value):
+        try:
+            obj = object.__getattribute__(self, name)
+        except AttributeError:
+            pass
+        else:
+            if hasattr(obj, '__set__'):
+                return obj.__set__(self, value)
+        return object.__setattr__(self, name, value)
+
+    def sweep(self, attr, value, rate=None, step=None):
+        """Smoothly adjust a parameter on the instrument."""
+        pass
+
+    def setup(self, attr, **kwargs):
+        """Return a descriptor and optionally modify it's attributes.
+
+        Bypasses the __getattribute__ descriptor protocal allowing inspection
+        and modification of the descriptor attribues"""
+        for key, value in kwargs.items():
+            try:
+                setattr(self.__dict__[attr], key, value)
+            except AttributeError:
+                pass
+        return self.__dict__[attr]
 
 
 class VisaInstrument(Instrument):

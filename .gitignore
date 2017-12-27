@@ -24,5 +24,7 @@ data/tangle-file.txt
 #Ignore misc folder#
 /logs
 
-#Ignore pytest
+#Ignore pytest, mypy etc.
 tests/.cache
+*.mypy_cache
+*.patch
