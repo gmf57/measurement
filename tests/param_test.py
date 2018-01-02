@@ -10,17 +10,19 @@ class FakeInstrument(Instrument):
     Parameters control values on Instrument instances so we must instatiate
     a simple instrument in order to test Parameter behavior.
     """
+    no_limit = ContinuousParam("A.U.")
+    val_limit = ContinuousParam("A.U.")
+    sweep_limit = ContinuousParam("A.U.")
+    single_limit = ContinuousParam("A.U.")
 
     def __init__(self, name="test"):
         super(FakeInstrument, self).__init__(name)
-        self.no_limit = ContinuousParam("no_limit", "A.U")
-        self.val_limit = ContinuousParam("val_limit", "A.U", -1, 1)
-        self.sweep_limit = ContinuousParam("sweep_limit", "A.U", -1, 1, 0.1,
-                                           0.1)
-        self.single_limit = ContinuousParam("single_limit", "A.U", 1)
+        self.update_validator("val_limit", {"minimum": -1, "maximum": 1})
+        self.update_validator("sweep_limit", {"rate": 0.1, "step": 0.1})
+        self.update_validator("single_limit", {"minimum": 1})
         # Manually set starting values for testing
         for attr in ["val_limit", "sweep_limit", "single_limit"]:
-            self.__dict__[attr].value = 0
+            self.__dict__[attr] = 0
 
 
 class TestContinuousParam(object):
@@ -61,9 +63,26 @@ class TestContinuousParam(object):
 
     def test_json(self, setup):
         """Verify that a Property can be written and recovered with json."""
-        json = setup.setup("sweep_limit").to_json()
-        copy = Param.from_json(json)
-        assert setup.setup("sweep_limit").__dict__ == copy.__dict__
+        json = setup.__class__.sweep_limit.to_json()
+        copy = ContinuousParam.from_json(json)
+        assert setup.__class__.sweep_limit.__dict__ == copy.__dict__
+
+    def test_new_limit(self, setup):
+        """Verify that changing the min/max when value is outside the new
+        limits works.
+
+        This is accomplished by checking value limits of final value only
+        instead of at each intermediate step."""
+        setup.sweep_limit = 0
+        setup.update_validator("sweep_limit", {
+            "minimum": 1,
+            "maximum": 2,
+            "step": 0.2,
+            "rate": 0.5
+        })
+        setup.sweep_limit = 1.0
+        with pytest.raises(ValueError):
+            setup.sweep_limit = 0.5
 
 
 class DiscreteInstrument(Instrument):
@@ -72,12 +91,12 @@ class DiscreteInstrument(Instrument):
     Parameters control values on Instrument instances so we must instatiate
     a simple instrument in order to test Parameter behavior.
     """
+    numeric = DiscreteParam([1, 2, 3])
+    string = DiscreteParam(["a", "b", "c"])
 
     def __init__(self, name="test"):
         super(DiscreteInstrument, self).__init__(name)
-        self.numeric = DiscreteParam("numeric", [1, 2, 3])
-        self.string = DiscreteParam("string", ["a", "b", "c"])
-        self.__dict__["numeric"].value = 0
+        self.__dict__["numeric"] = 0
 
 
 class TestDiscreteParam(object):

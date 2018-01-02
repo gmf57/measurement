@@ -1,6 +1,15 @@
 import pytest
-from measurement.instruments.drivers.test_instrument import FakeInstrument
-from measurement.instruments.param import Param
+from measurement.instruments.param import ContinuousParam
+from measurement.instruments.instrument import Instrument
+
+
+class FakeInstrument(Instrument):
+    """Create a skeleton instrument class so tests don't depend on drivers."""
+
+    def __init__(self, name):
+        super(FakeInstrument, self).__init__(name)
+        self.I = ContinuousParam("I", "A", -1, 1, 0.1, 0.1)
+        self.V = ContinuousParam("V", "V", -10, 10)
 
 
 class TestInstrument(object):
@@ -21,10 +30,8 @@ class TestInstrument(object):
         assert setup[1].V == 1
 
     def test_different_limits(self, setup):
-        """Test that instruments can have different limist on the Param"""
-        setup[0]._V.minimum = -1
-        setup[0]._V.maximum = 1
-        setup[1].V = 2
+        """Test that instruments can have different limits on the Param"""
+        setup[0].setup("V").minimum
         assert setup[1].V == 2
 
     def test_param_update(self, setup):
@@ -36,4 +43,8 @@ class TestInstrument(object):
 
     def test_param_access(self, setup):
         """Check that the underlying Params can be accessed."""
-        assert type(setup[0]._V) is Param
+        assert isinstance(setup[0].setup("V"), ContinuousParam)
+
+    def test_normal_attr(self, setup):
+        """Check that normal attribute access works."""
+        pass

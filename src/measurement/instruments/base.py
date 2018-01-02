@@ -9,7 +9,7 @@ import inspect
 class Loadable(object):
     """An object that can be written to and loaded from a config file."""
 
-    def __init__(self, name):
+    def __init__(self, name=None):
         """Create a Loadable.
 
         Args:
@@ -38,22 +38,6 @@ class Loadable(object):
             else:
                 json["properties"][key] = val
         return json
-
-    @staticmethod
-    def from_json(json):
-        """Generate Lodable from a json representation."""
-        # For now this directs the base implemetation to the correct
-        # class implementation
-        module = importlib.import_module(json["type"]["module"])
-        classname = json["type"]["class"]
-        data = json["properties"]
-        cls = getattr(module, classname)
-        # Use inspect to get the signature
-        sig = inspect.signature(cls)
-        # Use the json data to bind arguments to the signature
-        ba = sig.bind(* [data[key] for key in sig.parameters.keys()])
-        # Use the bound args to instantiate the object
-        return cls(*ba.args, **ba.kwargs)
 
     @staticmethod
     def from_json(json):

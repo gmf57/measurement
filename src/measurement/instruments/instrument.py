@@ -4,8 +4,9 @@ handle other interfaces later
 """
 
 import logging
-from measurement.instruments.param import Param
-from measurement.util.printing import Table
+from measurement.instruments.param import ContinuousValidator, ContinuousParam
+from measurement.instruments.param import DiscreteValidator, DiscreteParam
+
 from measurement.instruments.base import Loadable
 
 log = logging.getLogger(__name__)
@@ -14,57 +15,27 @@ log = logging.getLogger(__name__)
 class Instrument(Loadable):
     def __init__(self, name):
         self.name = name
+        for key, val in self.__class__.__dict__.items():
+            if isinstance(val, ContinuousParam):
+                setattr(self, "_" + key, ContinuousValidator(key))
+            if isinstance(val, DiscreteParam):
+                setattr(self, "_" + key, DiscreteValidator(key, val.values))
 
     def __str__(self):
-        return "<<{} {}>>".format(self.__class__.__name__, self.name)
+        return "<{}: {}>".format(self.__class__.__name__, self.name)
 
     def __repr__(self):
         return str(self)
-
-    def __delattr__(self, name):
-        res = self.__dict__.get(name)
-        for method in ('__get__', '__set__', '__delete__'):
-            if hasattr(res, method):
-                # If the attribute implements a descriptor protocol, use it.
-                res = res.__delete__(name)
-                break
-        else:
-            res = object.__delattr__(self, name)
-        return res
-
-    def __getattribute__(self, *args):
-        res = object.__getattribute__(self, *args)
-        for method in ('__get__', '__set__', '__delete__'):
-            if hasattr(res, method):
-                # we have a descriptor, call it
-                res = res.__get__(self, self.__class__)
-        return res
-
-    def __setattr__(self, name, value):
-        try:
-            obj = object.__getattribute__(self, name)
-        except AttributeError:
-            pass
-        else:
-            if hasattr(obj, '__set__'):
-                return obj.__set__(self, value)
-        return object.__setattr__(self, name, value)
 
     def sweep(self, attr, value, rate=None, step=None):
         """Smoothly adjust a parameter on the instrument."""
         pass
 
-    def setup(self, attr, **kwargs):
-        """Return a descriptor and optionally modify it's attributes.
+    def get_validator(self, attr):
+        return getattr(self, "_" + attr)
 
-        Bypasses the __getattribute__ descriptor protocal allowing inspection
-        and modification of the descriptor attribues"""
-        for key, value in kwargs.items():
-            try:
-                setattr(self.__dict__[attr], key, value)
-            except AttributeError:
-                pass
-        return self.__dict__[attr]
+    def update_validator(self, attr, limits):
+        self.get_validator(attr).set_limits(**limits)
 
 
 class VisaInstrument(Instrument):
