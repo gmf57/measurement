@@ -5,8 +5,12 @@ subclass np.array with DataSet that contains info about units. Data can
 can be collected in np.arrays in cast to DataSet with the np.array view
 feature. DataSets can also be directly instantiated during collection.
 """
+from datetime import datetime
+import os
 from git import Repo
 import numpy as np
+from measurement.measurements.callables import Getter
+from measurement.measurements.measurement import Measurement
 
 
 class DataSet(object):
@@ -15,8 +19,9 @@ class DataSet(object):
     Contains a DataArray for each recorded parameter in a measurement.
     """
 
-    def __init__(self, measurement):
-        self.measurement = measurement
+    def __init__(self, getter):
+        self.getter = getter
+        self._timestamp = datetime.now()
 
     def __str__(self):
         return "{} {}".format(self.__class__.__name__, self.filename)
@@ -36,25 +41,59 @@ class DataSet(object):
         else:
             setattr(self, data_array.name, data_array)
 
-    def save(self, formatter):
-        """Use the formatter to write a file."""
+    def append(self, data):
+        """Append a new data."""
         pass
+
+    def save(self):
+        """Use the formatter to write a file."""
+        return NotImplemented
+
+    def load(self):
+        return NotImplemented
+
+    @property
+    def timestamp(self):
+        return self._timestamp
 
     @property
     def filename(self):
-        """Inherit the filename from the parent Measurement."""
-        if hasattr(self.measurement, "filename"):
-            return self.measurement.filename
+        """
+        """
+        return self._filename
 
     @classmethod
-    def from_getter(cls, measurement, getter):
+    def from_measure(cls, measure):
         """Create a dataset designed to store parameters in a Getter."""
-        data_set = cls(measurement)
-        for attr in getter.attrs:
-            data_set.add(
-                DataArray(
-                    np.full(measurement.shape, np.nan), attr.name, attr.units))
+        data_set = cls(measure)
+        for call in measure:
+            if isinstance(call, Getter):
+                data_set.add(
+                    DataArray(
+                        np.full(measure.shape, np.nan), call.name, call.units))
+            if isinstance(call, Measurement):
+                setattr(data_set, "measurements", [])
         return data_set
+
+
+class TextDataSet(DataSet):
+    """Write data to a .txt file."""
+
+    def save(self):
+        pass
+
+    def load(self):
+        pass
+
+
+class Hdf5DataSet(DataSet):
+    """Write data to a .h5 file."""
+
+    def save(self):
+        pass
+
+    def load(self):
+        pass
 
 
 class DataArray(np.ndarray):
@@ -79,7 +118,8 @@ class DataArray(np.ndarray):
         return obj
 
     def __array_finalize__(self, obj):
-        if obj is None: return
+        if obj is None:
+            return
         self.name = getattr(obj, "name", None)
         self.units = getattr(obj, "units", None)
 
@@ -94,8 +134,10 @@ class DataArray(np.ndarray):
     @property
     def filename(self):
         """Read filename from parent DataSet."""
-        if hasattr(self, "parent"): return getattr(self.parent, "filename")
-        else: return None
+        if hasattr(self, "parent"):
+            return getattr(self.parent, "filename")
+        else:
+            return None
 
 
 class Metadata(object):
@@ -114,15 +156,15 @@ class Metadata(object):
     def __init__(self):
         """Initialize Metadata object.
         """
+        self.repo = Repo(os.path.dirname(measurement.__file__))
         self.git_info()
         self.get_setup()
 
     def git_info(self):
         """Get git info.
         """
-        self.repo = Repo(os.path.dirname(measurement.__file__))
-        self.git_hash = repo.git.log("-1", "--format=%H")
-        self.git_diff = repo.git.diff()
+        self.git_hash = self.repo.git.log("-1", "--format=%H")
+        self.git_diff = self.repo.git.diff()
 
     def get_setup(self):
         """Get info about setup.

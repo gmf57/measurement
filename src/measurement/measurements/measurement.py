@@ -1,17 +1,20 @@
-"""
-Get rid of redundant setting.
-Where is the callable array generated?
+"""Implement Measurements. Adjust instruments and record the response.
+
+Measurements adjust n different instrument settings exploring a n-dimensional
+parameter space. At each point in parameter a list of tasks are executed.
+
+The tasks executed at each point in parameter space can be simple (record
+a value on an instrument) or more complicated (execute a different
+Measurement).
+
 How does the function of MeasureList differ from TaskList?
 Make Sweep accept lists of before/during/after
 
 Write "validators" for measurements/Sweeps/etc.
 """
-import os
-import numpy as np
-import sched
-import copy
-from typing import Callable, Sequence, List
-from measurement.instruments.instrument import Instrument
+from typing import Sequence
+from measurement.measurements.callables import (Setter, Getter, Wait, TaskList,
+                                                Sweep, Measure)
 
 import logging
 log = logging.getLogger(__name__)
@@ -24,7 +27,7 @@ class Measurement(object):
     parameters that are recorded during the measurement.
     """
 
-    def __init__(self, sweeps, measure):
+    def __init__(self, sweeps: Sequence[Sweep], measure: Measure) -> None:
         """Create a new measurement from sweeps.
 
         Describe a parameter space to explore with sweeps. Describe what
@@ -42,10 +45,10 @@ class Measurement(object):
         """
         self.sweeps = sweeps
         self.measure = measure
-        self.callables = Sweep.gen_callables(*self.sweeps, measure)
+        self.callables = TaskList.gen_callables(*self.sweeps, measure)
 
     def __str__(self):
-        return "{} @ {}".format(self.__class__.name, self.timestamp)
+        return "<{} @ {}>".format(self.__class__.name, self.timestamp)
 
     def __repr__(self):
         return str(self)
@@ -55,32 +58,45 @@ class Measurement(object):
 
     def run(self):
         # Attach an empty, timestamped dataset
-        self.timestamp = datetime.now()
-        self.gen_filename()
-        self.data = DataSet(self)
-
+        self.data = DataSet.from_measure(self.measure)
         # Collect data
-        for c in self.callables:
-            if isinstance(c, Getter):
-                data = c()
+        for call in self.callables:
+            if isinstance(call, Measure):
+                # Get the data from the callable
+                self.data.append(call())
             else:
-                c()
-                pass
-            pass
-
+                call()
         # Save
+        self.save()
 
-    def gen_filename(self):
-        """Find location for saving data.
+    def save(self):
+        pass
 
-        TODO - more robust filename generation (check for existing files)
+    def duplocate(self):
+        pass
+
+    def validate(self):
+        """Verify that actions in the measurement will execute.
         """
-        name = (self.timestamp.strftime("%Y-%m-%d_%H%M%S") + "_" +
-                self.__class__.__name__)
-        if self.folder:
-            self.path = os.path.join(self.folder, name)
-        else:
-            self.path = os.path.join(measurement.data_folder, name)
+        for call in self.callables:
+            if isinstance(call, (Getter, Setter, Wait, Measurement)):
+                if hasattr(call, "validate"):
+                    call.validate()
+            else:
+                raise TypeError("Action {} not permitted in {}.".format(
+                    call, self.__class__.__name__))
+
+    @classmethod
+    def load(cls, path):
+        inst = cls()
+        return inst
+
+    @classmethod
+    def from_callables(cls, callables):
+        """Instantiate a measurement directly from a sequence of callables."""
+        inst = cls(None, None)
+        inst.callables = callables
+        return inst
 
 
 class MeasureTime(Measurement):

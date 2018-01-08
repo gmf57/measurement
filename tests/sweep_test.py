@@ -37,6 +37,10 @@ class TestSweep(object):
         callables = Sweep.gen_callables(*setup)
         assert False  # Finish this test
 
+    def test_redundant_setters(self, setup):
+        """Verify that there are no redundant Setters in the TaskList."""
+        pass
+
 
 class TestSetter(object):
     pass

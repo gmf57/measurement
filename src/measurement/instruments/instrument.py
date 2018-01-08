@@ -1,25 +1,31 @@
-"""
-Writing VisaInstrument interface. For now worry just about visa instruments
-handle other interfaces later
+"""Define an Instrument - a python representation of a single instrument.
+
+Instruments are implemented as a collection of Params. A few methods are
+implemented to make modifying the Params easier.
 """
 
 import logging
-from measurement.instruments.param import ContinuousValidator, ContinuousParam
-from measurement.instruments.param import DiscreteValidator, DiscreteParam
-
+from measurement.instruments.param import Param
 from measurement.instruments.base import Loadable
 
 log = logging.getLogger(__name__)
 
 
 class Instrument(Loadable):
+    """Generic representation of an instrument.
+
+    Class-level descriptors manage instance-level data. The discriptors
+    use instance-level data stored in Validators to to check changes to
+    the values of a instrument parameter.
+    """
+
     def __init__(self, name):
+        """Create an instrument with validators to class-level descriptors."""
         self.name = name
         for key, val in self.__class__.__dict__.items():
-            if isinstance(val, ContinuousParam):
-                setattr(self, "_" + key, ContinuousValidator(key))
-            if isinstance(val, DiscreteParam):
-                setattr(self, "_" + key, DiscreteValidator(key, val.values))
+            if isinstance(val, Param):
+                # Create a validator for managing the attribute.
+                setattr(self, "_" + key, val._setup())
 
     def __str__(self):
         return "<{}: {}>".format(self.__class__.__name__, self.name)
@@ -37,36 +43,9 @@ class Instrument(Loadable):
     def update_validator(self, attr, limits):
         self.get_validator(attr).set_limits(**limits)
 
+    def get_descriptor(self, attr):
+        return self.__class__.__dict__[attr]
 
-class VisaInstrument(Instrument):
-    """Describes an instrument that communicates via VISA interface."""
-
-    def __init__(self, name, gpib_address):
-        """Initialize an instrument with VISA communication."""
-        super(VisaInstrument, self).__init__(name)
-        self.gpib_address = gpib_address
-
-    def add(self, prop, get_command, set_command, units):
-        """Add a property to the instrument."""
-        setattr(self, prop,
-                VisaProperty(prop, get_command, set_command, units, self))
-
-    def write_raw(self, cmd):
-        bytes_written, ret_code = self.visa_handle.write(cmd)
-
-    def ask_raw(self, cmd):
-        return self.visa_handle.ask(cmd)
-
-    def set_address(self, address):
-        """Open VISA connection for instrument"""
-        # Close an existing visa handle
-        if getattr(self, 'visa_handle', None):
-            self.visa_handle.close()
-
-        resource_manager = visa.ResourceManager()
-        self.visa_handle = resource_manager.open_resource(address)
-        self._address = address
-
-    def save(self):
-        """Save the configuration of the instrument"""
-        pass
+    def zero(self, attr):
+        """Zero an attribute."""
+        self.sweep(attr, 0)

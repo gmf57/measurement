@@ -156,6 +156,10 @@ class ContinuousParam(Param):
         """Directly adjust the paramter without checking limits."""
         instance.__dict__[self.key] = value
 
+    def _setup(self):
+        """Return a validator for managing a ContinuousParam."""
+        return ContinuousValidator(self.key)
+
     def sweep(self, instance, value, step, rate):
         """Continuously adjust the parameter.
 
@@ -200,3 +204,7 @@ class DiscreteParam(Param):
         If setting is str-like then it require matches."""
         closest = instance.__dict__["_" + self.key].check_value(value)
         instance.__dict__[self.key] = closest
+
+    def _setup(self):
+        """Return a Validator that manages a DiscreteParam."""
+        return DiscreteValidator(self.key)
