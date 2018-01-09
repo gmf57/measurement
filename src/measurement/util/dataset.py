@@ -9,6 +9,7 @@ from datetime import datetime
 import os
 from git import Repo
 import numpy as np
+import measurement
 from measurement.measurements.callables import Getter
 from measurement.measurements.measurement import Measurement
 
@@ -17,14 +18,20 @@ class DataSet(object):
     """A collection of DataArray
 
     Contains a DataArray for each recorded parameter in a measurement.
+
+    Should DataSet be a namedtuple or ordered dict?
     """
 
-    def __init__(self, getter):
-        self.getter = getter
+    def __init__(self, measure, shape):
+        """
+        """
+        self.measure = measure
+        self.shape = shape
         self._timestamp = datetime.now()
+        self.metadata = self.get_metadata()
 
     def __str__(self):
-        return "{} {}".format(self.__class__.__name__, self.filename)
+        return "<{} {}>".format(self.__class__.__name__, self.filename)
 
     def __repr__(self):
         return str(self)
@@ -43,7 +50,8 @@ class DataSet(object):
 
     def append(self, data):
         """Append a new data."""
-        pass
+        for value in data:
+            pass
 
     def save(self):
         """Use the formatter to write a file."""
@@ -52,13 +60,24 @@ class DataSet(object):
     def load(self):
         return NotImplemented
 
+    def get_metadata(self):
+        """Record information about setup and git repo."""
+        repo = Repo(os.path.dirname(measurement.__file__))
+        return {
+            "git_hash": repo.get.log("-1", "--format=%H"),
+            "git_diff": repo.git.diff(),
+            "setup": "fix"
+        }
+
     @property
     def timestamp(self):
+        """Timestamp is set @ object creation and should not be modified.
+        """
         return self._timestamp
 
     @property
     def filename(self):
-        """
+        """Filename is set @ object creation and should not be modified.
         """
         return self._filename
 
@@ -72,7 +91,7 @@ class DataSet(object):
                     DataArray(
                         np.full(measure.shape, np.nan), call.name, call.units))
             if isinstance(call, Measurement):
-                setattr(data_set, "measurements", [])
+                setattr(data_set, call.__class__.__name__, [])
         return data_set
 
 
@@ -124,7 +143,7 @@ class DataArray(np.ndarray):
         self.units = getattr(obj, "units", None)
 
     def __str__(self):
-        return "<<{}: {} ({}) from {}\n{}>>".format(
+        return "<{}: {} ({}) from {}\n{}>".format(
             self.__class__.__name__, self.name, self.units, self.filename,
             np.array2string(self))
 
@@ -138,40 +157,3 @@ class DataArray(np.ndarray):
             return getattr(self.parent, "filename")
         else:
             return None
-
-
-class Metadata(object):
-    """
-    Get metadata information for saving.
-
-    Contains:
-    - git hash
-    - git diff
-    - date/time
-    - instrument config
-    - writing to file
-    - printing/slicing utilities
-    """
-
-    def __init__(self):
-        """Initialize Metadata object.
-        """
-        self.repo = Repo(os.path.dirname(measurement.__file__))
-        self.git_info()
-        self.get_setup()
-
-    def git_info(self):
-        """Get git info.
-        """
-        self.git_hash = self.repo.git.log("-1", "--format=%H")
-        self.git_diff = self.repo.git.diff()
-
-    def get_setup(self):
-        """Get info about setup.
-        """
-        pass
-
-    def write(self):
-        """Write a human-readable metadata file.
-        """
-        pass

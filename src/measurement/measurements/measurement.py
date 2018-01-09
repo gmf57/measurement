@@ -15,6 +15,7 @@ Write "validators" for measurements/Sweeps/etc.
 from typing import Sequence
 from measurement.measurements.callables import (Setter, Getter, Wait, TaskList,
                                                 Sweep, Measure)
+from measurement.util.dataset import DataSet
 
 import logging
 log = logging.getLogger(__name__)
@@ -56,11 +57,31 @@ class Measurement(object):
     def __call__(self):
         self.run()
 
+    def __iter__(self):
+        yield from Measurement._iter_helper(self.sweeps[0], self.sweeps[1:],
+                                            self.measure)
+
+    @staticmethod
+    def _iter_helper(first, *rest, measure):
+        """Recursive helper method to make Measurements iterable."""
+        if first.before:
+            yield first.before
+        for value in first:
+            if first.during:
+                yield first.during
+            yield value
+            if rest:
+                yield from Measurement._iter_helper(rest[0], *rest[1:])
+            else:
+                yield measure
+        if first.after:
+            yield first.after
+
     def run(self):
         # Attach an empty, timestamped dataset
         self.data = DataSet.from_measure(self.measure)
         # Collect data
-        for call in self.callables:
+        for call in self:
             if isinstance(call, Measure):
                 # Get the data from the callable
                 self.data.append(call())
@@ -72,13 +93,17 @@ class Measurement(object):
     def save(self):
         pass
 
-    def duplocate(self):
+    def duplicate(self):
         pass
 
     def validate(self):
         """Verify that actions in the measurement will execute.
+
+        Measurements excpect that all callables are one of:
+        (Getter, Setter, Wait, Measurement). If the callable has a validate
+        method, run it.
         """
-        for call in self.callables:
+        for call in self:
             if isinstance(call, (Getter, Setter, Wait, Measurement)):
                 if hasattr(call, "validate"):
                     call.validate()
@@ -91,16 +116,11 @@ class Measurement(object):
         inst = cls()
         return inst
 
-    @classmethod
-    def from_callables(cls, callables):
-        """Instantiate a measurement directly from a sequence of callables."""
-        inst = cls(None, None)
-        inst.callables = callables
-        return inst
-
 
 class MeasureTime(Measurement):
-    """Record a set of parameters periodically over a period of time."""
+    """Record a set of parameters periodically over a period of time.
+
+    Possible that this is not needed at all"""
 
     def __init__(self, period, time, measure):
         """

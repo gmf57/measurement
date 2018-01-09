@@ -5,6 +5,7 @@ set up to form a measurement.
 """
 import numpy as np
 import time
+from collections import OrderedDict
 from typing import Sequence, Callable, List
 from measurement.instruments.instrument import Instrument
 from measurement.measurements.measurement import Measurement
@@ -54,7 +55,8 @@ class Getter(object):
         return getattr(self.inst, self.attr)
 
     def __str__(self):
-        return "<{}: {}>".format(self.__class__.__name__, self.attrs)
+        return "<{}: {} from {}>".format(self.__class__.__name__, self.attr,
+                                         self.inst)
 
     def __repr__(self):
         return str(self)
@@ -104,10 +106,7 @@ class TaskList(object):
     def __add__(self, other):
         return self.callables + other.callables
 
-    def __call__(self):
-        return [call() for call in self.callables]
-
-    @classmethod
+    @staticmethod
     def parse(call1, call2):
         """Take either a single callable or list of callables and make a
         TaskList
@@ -142,9 +141,10 @@ class TaskList(object):
             if sweep.during:
                 callables.append(sweep.during)
             # Recursively insert the callables from other sweeps in args
+            callables.append(call)
             if args:
-                for call in TaskList.gen_callables(*args):
-                    callables.append(call)
+                for other_call in TaskList.gen_callables(*args):
+                    callables.append(other_call)
         # Append actions done once after the sweep is complete
         if sweep.after:
             callables.append(sweep.after)
@@ -223,20 +223,31 @@ class Sweep(TaskList):
         return TaskList(callables)
 
 
-class Measure(TaskList):
+class Measure(OrderedDict):
     """A set of tasks executed at each point in a Measurement's parameter space.
+
+    Has the structure of a dict with key/val pairs. Keys are names of parameters
+    values are callables.
     """
 
-    def __init__(self, callables: Sequence[Callable]):
-        super(Sweep, self).__init__(callables)
+    def __init__(self, *args, **kwargs):
+        super(Measure, self).__init__(*args, **kwargs)
 
     def __call__(self):
-        return [call() for call in self.callables]
+        return [call() for call in self.values()]
 
     def validate(self):
         for call in self.tasks:
-            if isinstance(call, (Getter, Measurement, TaskList)):
+            if isinstance(call, (Getter, Measurement)):
                 pass
             else:
                 raise TypeError("Action {} not permitted in {}.".format(
                     call, self.__class__.__name))
+
+    @classmethod
+    def gen_measure(cls, callables: Sequence[Callable]) -> "Measure":
+        """Create a Measure from a list of callables."""
+        ret = cls()
+        for call in callables:
+            ret.update({call.name, call})
+        return ret
