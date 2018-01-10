@@ -10,84 +10,8 @@ from measurement.instruments.base import Loadable
 log = logging.getLogger(__name__)
 
 
-class Validator(Loadable):
-    def __init__(self, name):
-        self.name = name
-
-    def __str__(self):
-        return "<{}: {}>".format(self.__class__.__name__, self.name)
-
-    def __repr__(self):
-        return str(self)
-
-    def set_limits(self, **limits):
-        """Use a dictionary to update limits on a parameter."""
-        for key, val in limits.items():
-            setattr(self, key, val)
-
-
-class ContinuousValidator(Validator):
-    def __init__(self, name, minimum=None, maximum=None, rate=None, step=None):
-        super(ContinuousValidator, self).__init__(name)
-        self.minimum = minimum
-        self.maximum = maximum
-        self.rate = rate
-        self.step = step
-
-    def check_limit(self, value):
-        """Confirm that the requested setpoint does not violate limits."""
-        try:
-            if value > self.maximum:
-                raise ValueError("{} violates limit {} on {}".format(
-                    value, self.maximum, self.name))
-        except TypeError:
-            pass
-        try:
-            if value < self.minimum:
-                raise ValueError("{} violates limit {} on {}".format(
-                    value, self.minimum, self.name))
-        except TypeError:
-            pass
-
-    def check_sweep(self, value, rate=None, step=None):
-        """Confirm that the sweep parameters do not violate any limits."""
-        self.check_limit(value)
-        try:
-            if rate > self.rate:
-                raise ValueError("{} violates limit {} on {}".format(
-                    rate, self.rate, self.name))
-        except TypeError:
-            pass
-        try:
-            if step > self.step:
-                raise ValueError("{} violoates limit {} on {}".format(
-                    step, self.step, self.name))
-        except TypeError:
-            pass
-
-
-class DiscreteValidator(Validator):
-    def __init__(self, name, values):
-        super(DiscreteValidator, self).__init__(name)
-        self.values = values
-
-    def check_value(self, value):
-        """Confirm that the setpoint is valid for the parameter."""
-        if value in self.values:
-            return value
-        else:
-            try:
-                closest = min(self.values, key=lambda x: abs(x - value))
-            except TypeError:
-                # Then it's not a numeric parameter. Raise a value error
-                raise ValueError(
-                    "{} cannot be set to {}".format(self.name, value))
-            else:
-                return closest
-
-
 class Param(Loadable):
-    """
+    """Describe a single parameter on an Instrument.
     """
 
     def __get__(self, instance, owner):
@@ -141,12 +65,20 @@ class ContinuousParam(Param):
         self.step = step
 
     def __set__(self, instance, value):
-        validator = instance.__dict__["_" + self.key]
-        validator.check_limit(value)
-        if validator.step and validator.rate:
-            self.sweep(instance, value, validator.step, validator.rate)
+        limits = getattr(instance, "_" + self.key)
+        # Check that the value does not violate limits
+        self.check_value(value, limits["minimum"], limits["maximum"])
+        # Sweep the parameter in small steps if possible
+        if limits["rate"] and limits["step"]:
+            self.sweep(instance, value, limits["rate"], limits["step"])
+        # Directly set the parameter if not
         else:
             self._set(instance, value)
+
+    def check_value(self, value, minimum, maximum):
+        if not minimum <= value <= maximum:
+            raise ValueError(
+                "{} violates limits {} on {}".format(value, limits, self.key))
 
     def __str__(self):
         return "<{}: {} ({})>".format(self.__class__.__name__, self.key,
@@ -154,11 +86,18 @@ class ContinuousParam(Param):
 
     def _set(self, instance, value):
         """Directly adjust the paramter without checking limits."""
-        instance.__dict__[self.key] = value
+        instance.__dict__[self.key]["value"] = value
 
     def _setup(self):
-        """Return a validator for managing a ContinuousParam."""
-        return ContinuousValidator(self.key)
+        """Return a dict for managing a ContinuousParam."""
+        return {
+            "value": None,
+            "units": self.units,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
+            "rate": self.rate,
+            "step": self.step
+        }
 
     def sweep(self, instance, value, step, rate):
         """Continuously adjust the parameter.
@@ -202,9 +141,25 @@ class DiscreteParam(Param):
         """If possible sets the range to the nearest value.
 
         If setting is str-like then it require matches."""
-        closest = instance.__dict__["_" + self.key].check_value(value)
+        closest = self.check_value(value,
+                                   instance.__dict__["_" + self.key]["values"])
         instance.__dict__[self.key] = closest
 
+    def check_value(self, value, values):
+        """Take a requested value and return the closest match for setting."""
+        # If the value is allowed then return it for setting
+        if value in values:
+            return value
+        else:
+            try:
+                closest = min(self.values, key=lambda x: abs(x - value))
+            except TypeError:
+                # Then it's not a numeric paramter. Raise a value error.
+                raise ValueError(
+                    "{} cannot be set to {}".format(self.name, value))
+            else:
+                return closest
+
     def _setup(self):
-        """Return a Validator that manages a DiscreteParam."""
-        return DiscreteValidator(self.key)
+        """Return a dict that manages a DiscreteParam."""
+        return {"value": None, "values": self.values}

@@ -37,12 +37,6 @@ class Instrument(Loadable):
         """Smoothly adjust a parameter on the instrument."""
         pass
 
-    def get_validator(self, attr):
-        return getattr(self, "_" + attr)
-
-    def update_validator(self, attr, limits):
-        self.get_validator(attr).set_limits(**limits)
-
     def get_descriptor(self, attr):
         return self.__class__.__dict__[attr]
 
