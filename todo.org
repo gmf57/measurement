@@ -1,5 +1,30 @@
 #+STARTUP:
 * TODO list
+- [ ] Virtual instruments for testing
+- [ ] Data I/O from nested measurements
+- [ ] Write setup class with saving
+- [ ] Docstring stuff
+- [ ] Live plotting
+- [ ] Remove validator classes - replace with functions
+
+* Motivation
+** Nested measurement series
+** Standardizing measurement and instrument API
+*** Standardizing instrument interface
+If all instruments use the same API then you can write routines that do not depend on the details of a particular instrument driver implementation.
+
+This is accomplished by implementing Paramter classes. Instruments can be thought of as containers for parameters. Parameters provide a standard interface for writing/setting parameters.
+*** Move away from script based measurement
+If measurements all use the same API then you can build new measurements rapidly (with a program) rather than writing a new measurement script for every new task.
+
+This is accomplished by abstracting a measurement procedure to recording a set of parameters while mapping out a hypercube in parameter space. By specifying the parameter space to be mapped and the parameters to be recorded you can deterministically generate a set of commands issued to the instruments that will complete the measurement.
+** Build classes that do one thing well
+** Separation of data and code
+Configuration of instruments is data and should be documented in text rather than in code that must obey python syntax.
+
+This is accomplished by making instruments/setups/parameters capable of writing their configuration to plain text. The objects have classmethods that allow them to be re-instantiated from text. This removes setup "scripts" and replaces them with "setup config files".
+** Custom metadata
+Easily customize the metadata that is written to disc for a particular measurement.
 * Organization
 - [X] setup git
 - [X] setup linting
@@ -35,6 +60,12 @@ I'm picking numpydoc. The only thing that comes close is the google style.
 - remove dependance on external attrdict
 - dataclass is in main python
 - need to wait for python 3.7
+*** astropy.units over pint for units
+Astropy has:
+- better string formatting (automatically support tex labels)
+- easier subclassing (Quantity decends directly from numpy.ndarray so documentation for subclassing is better)
+- custom units (good for defining units of flux quanta)
+- more mature (matplotlib support has better documentation and has existed for a longer period of time)
 *** refactor measurements/instruments
 - write classes that perform single functions
 - improve flexibility/extensibility
@@ -67,6 +98,7 @@ Then the DataSet would have the following structure:
 Using python 3.6 and static type checking allows for mypy to catch errors in scripts before runtime.
 
 Need to figure out how to make typing check for a "base" class, e.g. instances that inerit from Parameter like VisaParameter will work so that List[Parameter] and List[VisaParameter] = List[Parameter]
+*** 
 ** Instruments
 - [ ] GPIB commuication protocal
 - [X] how to handle parameter change when the rate/min/max/step not set?
@@ -104,6 +136,8 @@ defin [rate/step] -> fail, pass
 2. Instruments inherit from a class that allow instance-variable implementation of the descriptor protocal. -> This is the "cleanest" solution.
 3. Dynamically create descriptors that manage values in instance-variable classes (what I had previously) -> causes confusing modification of class variables.
 I'm going with option 2. It minimizes the number of objects and their complexity. I don't thing there will be a problem with attribute access on the instruments - but that's the only thing that could go wrong.
+
+The "other" option is the callable API where the dotted lookup for individual instrument parameters is sacrificed. I think this is fine if you write the __repr__ to include the parameter setpoint.
 ** Setup
 - [X] test re-creating from json
 - [ ] writing to file
@@ -178,4 +212,3 @@ The idea is to make objects from the ground up starting with a "Param" (the lowe
 **** Param
 *** Measurement
   
-

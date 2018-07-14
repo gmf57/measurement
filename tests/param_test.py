@@ -10,53 +10,45 @@ class FakeInstrument(Instrument):
     Parameters control values on Instrument instances so we must instatiate
     a simple instrument in order to test Parameter behavior.
     """
-    no_limit = ContinuousParam("A.U.")
-    val_limit = ContinuousParam("A.U.")
-    sweep_limit = ContinuousParam("A.U.")
-    single_limit = ContinuousParam("A.U.")
-
-    def __init__(self, name="test"):
-        super(FakeInstrument, self).__init__(name)
-        self.update_validator("val_limit", {"minimum": -1, "maximum": 1})
-        self.update_validator("sweep_limit", {"rate": 0.1, "step": 0.1})
-        self.update_validator("single_limit", {"minimum": 1})
-        # Manually set starting values for testing
-        for attr in ["val_limit", "sweep_limit", "single_limit"]:
-            self.__dict__[attr] = 0
+    no_limit = ContinuousParam("no_limit", "V")
+    val_limit = ContinuousParam("val_limit", "V", -1, 1)
+    sweep_limit = ContinuousParam("sweep_limit", "V", -1, 1, 0.1, 0.1)
+    single_limit = ContinuousParam("single_limit", "V", maximum=10)
 
 
 class TestContinuousParam(object):
     @pytest.fixture
     def setup(self, request):
         """Generate Property instances with different configuration."""
-        return FakeInstrument()
+        return FakeInstrument("test")
 
     def test_setting(self, setup):
         """Test that values can be set.
 
-        Params should implement a descriptor protocal allowing you to set/read
-        attributes with simple statements."""
-        setup.no_limit = 0.5
-        assert setup.no_limit == 0.5
-        setup.val_limit = 0.5
-        assert setup.val_limit == 0.5
-        setup.sweep_limit = 0.5
-        assert setup.sweep_limit == 0.5
-        setup.single_limit = 2
-        assert setup.single_limit == 2
+        Params should implement a callable api - you read/write params
+        with the __call__ method."""
+        setup.no_limit(0.5)
+        assert setup.no_limit() == 0.5
+        setup.val_limit(0.5)
+        assert setup.val_limit() == 0.5
+        setup.sweep_limit(0.5)
+        assert setup.sweep_limit() == 0.5
+        setup.single_limit(-1)
+        assert setup.sweep_limit() == -1
 
     def test_limits(self, setup):
         """Test that values are limited."""
         with pytest.raises(ValueError):
-            setup.val_limit = 2
+            setup.val_limit(2)
         with pytest.raises(ValueError):
-            setup.val_limit = -2
+            setup.val_limit(-2)
         with pytest.raises(ValueError):
-            setup.single_limit = 0.1
+            setup.single_limit(11)
 
     def test_sweep_timing(self, setup):
+        """Test that sweep rate is limited."""
         start = datetime.now()
-        setup.sweep_limit = 1
+        setup.sweep_limit(1)
         end = datetime.now()
         delta = end - start
         assert delta.seconds >= 10
@@ -73,16 +65,14 @@ class TestContinuousParam(object):
 
         This is accomplished by checking value limits of final value only
         instead of at each intermediate step."""
-        setup.sweep_limit = 0
-        setup.update_validator("sweep_limit", {
-            "minimum": 1,
-            "maximum": 2,
-            "step": 0.2,
-            "rate": 0.5
-        })
-        setup.sweep_limit = 1.0
+        setup.sweep_limit(0)
+        setup.sweep_limit.minimum = 1
+        setup.sweep_limit.maximum = 2
+        setup.sweep_limit(1.5)
+        # Check that adjustment works
+        assert setup.sweep_limit() == 1.5
         with pytest.raises(ValueError):
-            setup.sweep_limit = 0.5
+            setup.sweep_limit(0.5)
 
 
 class DiscreteInstrument(Instrument):
@@ -91,12 +81,11 @@ class DiscreteInstrument(Instrument):
     Parameters control values on Instrument instances so we must instatiate
     a simple instrument in order to test Parameter behavior.
     """
-    numeric = DiscreteParam([1, 2, 3])
-    string = DiscreteParam(["a", "b", "c"])
+    numeric = DiscreteParam("numeric", "V", [1, 2, 3])
+    string = DiscreteParam("string", None, ["a", "b", "c"])
 
     def __init__(self, name="test"):
         super(DiscreteInstrument, self).__init__(name)
-        self.__dict__["numeric"] = 0
 
 
 class TestDiscreteParam(object):
@@ -107,10 +96,10 @@ class TestDiscreteParam(object):
 
     def test_setting(self, setup):
         """Test setting numeric and string-like discrete parameters."""
-        setup.numeric = 2
-        assert setup.numeric == 2
-        setup.string = "a"
-        assert setup.string == "a"
+        setup.numeric(2)
+        assert setup.numeric() == 2
+        setup.string("a")
+        assert setup.string() == "a"
 
     def test_nearest(self, setup):
         """Test setting with value outside the accepted values.
@@ -118,8 +107,8 @@ class TestDiscreteParam(object):
         closest to the requested value. DiscretParams with string settings
         will raise an exception.
         """
-        setup.numeric = 4
-        assert setup.numeric == 3
+        setup.numeric(4)
+        assert setup.numeric() == 3
 
     def test_str_limits(self, setup):
         """DiscreteParams with str settings allow only expected values.
@@ -129,6 +118,6 @@ class TestDiscreteParam(object):
             setup_str.set("d")
         """
         with pytest.raises(ValueError):
-            setup.string = 5
+            setup.string(5)
         with pytest.raises(ValueError):
-            setup.string = "d"
+            setup.string("d")

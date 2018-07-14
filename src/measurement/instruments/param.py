@@ -1,6 +1,5 @@
 """Define a Param - a representation of a single setting on an instrument.
 """
-import operator
 import time
 import math
 import logging
@@ -11,155 +10,170 @@ log = logging.getLogger(__name__)
 
 
 class Param(Loadable):
-    """Describe a single parameter on an Instrument.
+    """
+    How to set allowable values?
+
+    TODO - knows how to use a mapping to get/set values
     """
 
-    def __get__(self, instance, owner):
-        """
-        """
-        if instance is None:
-            return self
-        return instance.__dict__[self.key]
+    def __init__(self,
+                 name,
+                 units,
+                 instrument=None,
+                 mapping=None,
+                 validator=None,
+                 max_rate=None,
+                 max_step=None):
+        self.name = name
+        self.units = units
+        self.instrument = instrument
+        self.mapping = mapping
+        self.validator = validator
+        self.rate = max_rate,
+        self.step = max_step
 
-    def __set__(self, instance, value):
-        """Should validate then set."""
-        raise NotImplementedError
-
-    def __set_name__(self, owner, name):
-        self.key = name
+    def __call__(self, value=None, **kwargs):
+        """Define call interface to parameters."""
+        if not value:
+            return self.getter()
+        else:
+            self.setter(value, **kwargs)
 
     def __str__(self):
-        return "<{}: {}>".format(self.__class__.__name__, self.name)
+        return "<{}: {} = {} ({})>".format(self.__class__.__name__, self.name,
+                                           self(), self.units)
 
     def __repr__(self):
         return str(self)
 
-    def _setup(self):
-        """Write instance specific data needed to manage the value.
+    def getter(self):
+        raise NotImplementedError
 
-        For continuous params it sets limits for discrete params it
-        specifies allowed values"""
+    def setter(self):
         raise NotImplementedError
 
 
-class ContinuousParam(Param):
-    """Param use cases
+class VisaParam(Param):
+    """An instrument parameter that uses VISA for communication.
+    
+    Reads and writes parameter settings via the VISA handle that it's
+    parent instrument uses.
 
-    Impose limits on parameter values - look in a dict on the instrument to get
-    the right limits.
-    Variable rate sweeping. Use a bunch of sweep rate that do not exceed the
-    master sweep rate -> implement a sweep that adjusts the sweep rate limits.
+    TODO implemet rate limits
+    TODO should rate limit default to max safe or raise an exception?
     """
 
     def __init__(self,
-                 units=None,
-                 minimum=None,
-                 maximum=None,
-                 rate=None,
-                 step=None):
-        super(ContinuousParam, self).__init__()
-        self.units = units
-        self.minimum = minimum
-        self.maximum = maximum
-        self.rate = rate
-        self.step = step
+                 name,
+                 units,
+                 get_cmd,
+                 set_cmd,
+                 parser,
+                 instrument=None,
+                 mapping=None,
+                 validator=None,
+                 max_rate=None,
+                 max_step=None):
+        super.__init__(instrument, name, units, mapping, validator, max_rate,
+                       max_step)
+        self.write_str = get_cmd
+        self.read_str = set_cmd
+        self.parser = parser
 
-    def __set__(self, instance, value):
-        limits = getattr(instance, "_" + self.key)
-        # Check that the value does not violate limits
-        self.check_value(value, limits["minimum"], limits["maximum"])
-        # Sweep the parameter in small steps if possible
-        if limits["rate"] and limits["step"]:
-            self.sweep(instance, value, limits["rate"], limits["step"])
-        # Directly set the parameter if not
+    def getter(self):
+        """Read value from instrument."""
+        if self.parser:
+            return self.parser.format(self.instrument.ask(self.read_str))
         else:
-            self._set(instance, value)
+            return self.instrument.ask(self.read_str)
 
-    def check_value(self, value, minimum, maximum):
-        if not minimum <= value <= maximum:
-            raise ValueError(
-                "{} violates limits {} on {}".format(value, limits, self.key))
+    def _set(self, value):
+        """Directly write value to instrument."""
+        if self.mapping:
+            self.instrument.write(self.mapping[value])
+        else:
+            self.instrument.write(self.write_str.format(value))
 
-    def __str__(self):
-        return "<{}: {} ({})>".format(self.__class__.__name__, self.key,
-                                      self.units)
+    def setter(self, value, **kwargs):
+        """Handle setting of parameter values.
 
-    def _set(self, instance, value):
-        """Directly adjust the paramter without checking limits."""
-        instance.__dict__[self.key]["value"] = value
+        Limits on the parameter setpoint and sweep rate are applied if 
+        available.
 
-    def _setup(self):
-        """Return a dict for managing a ContinuousParam."""
-        return {
-            "value": None,
-            "units": self.units,
-            "minimum": self.minimum,
-            "maximum": self.maximum,
-            "rate": self.rate,
-            "step": self.step
-        }
+        Args:
+            value - new setpoint for parameter.
+        Kwargs:
+            step - step size for sweeping the paramter.
+            rate - sweep rate in units/second for paramter.
+        """
+        # Check that the requested value does not violate limits
+        if self.validator:
+            try:
+                value = self.validator(value)
+            # If the validator raises an exception, re-raise it with
+            # information about the instrument and parameter that caused
+            # the exception
+            except ValueError as e:
+                raise ValueError("{}: {} - ".format(self.instrument.name,
+                                                    self.name) + e.args[0])
+        # If limits are set on the sweep rate then sweep the parameter
+        if ["step", "rate"] in kwargs.keys():
+            self.sweep(self, value, kwargs["step"], kwargs["rate"])
+        # If sweep limits are not provided use the maximum safe values
+        elif self.max_rate and self.max_step:
+            self.sweep(self, value, self.max_rate, self.max_step)
+        # If no sweep limits are set then directly set the parameter.
+        else:
+            self._set(value)
 
-    def sweep(self, instance, value, step, rate):
+    def sweep(self, value, step, rate):
         """Continuously adjust the parameter.
 
         The number of points for the sweep is selected such that the
         maximum step size is not exceeded. The rate of the sweep is
         selected such that the maximum sweep rate is not exceeded
 
-        To limit the sweep rate but not the value that you sweep to, use
-        a set_func that doesn't check the the values vs. self.maximum and
-        self.minimum.
-
         Args:
             val (float): value of the parameter to sweep to
-            rate (float): rate (unit/s) to sweep parameter
+            rate (float): rate (step/s) to sweep parameter
             step (float): maximum step size of parameter during sweep
         """
+        # Check that step size is not too large
+        if step > self.max_step:
+            raise ValueError("step size {} larger than max {} on {} {}".format(
+                step, self.max_step, self.instrument.name, self.name))
+        # Check that sweep rate is not too fast
+        if rate > self.max_rate:
+            raise ValueError(
+                "sweep rate {} larger than max {} on {} {}".format(
+                    rate, self.max_rate, self.instrument.name, self.name))
         # Define the values that are swept over
-        start = self.__get__(instance, None)
+        start = self.getter()
         num = math.ceil(np.abs(start - value) / step)
         vals = np.linspace(start, value, num)
         delay = step / rate
         # Run the sweep
         for val in vals:
-            self._set(instance, val)
+            self._set(val)
             time.sleep(delay)
 
 
-class DiscreteParam(Param):
-    """A parameter that takes on a small set of hardware-defined values."""
+def discrete_validator(value, values):
+    if value in values:
+        return value
 
-    def __init__(self, values):
-        """
-        Args:
-            values (list): values that the Param can take
-        """
-        super(DiscreteParam, self).__init__()
-        self.values = values
-
-    def __set__(self, instance, value):
-        """If possible sets the range to the nearest value.
-
-        If setting is str-like then it require matches."""
-        closest = self.check_value(value,
-                                   instance.__dict__["_" + self.key]["values"])
-        instance.__dict__[self.key] = closest
-
-    def check_value(self, value, values):
-        """Take a requested value and return the closest match for setting."""
-        # If the value is allowed then return it for setting
-        if value in values:
-            return value
+    else:
+        try:
+            closest = min(values, key=lambda x: abs(x - value))
+        except TypeError:
+            raise ValueError("{} not a valid value".format(value), value)
         else:
-            try:
-                closest = min(self.values, key=lambda x: abs(x - value))
-            except TypeError:
-                # Then it's not a numeric paramter. Raise a value error.
-                raise ValueError(
-                    "{} cannot be set to {}".format(self.name, value))
-            else:
-                return closest
+            return closest
 
-    def _setup(self):
-        """Return a dict that manages a DiscreteParam."""
-        return {"value": None, "values": self.values}
+
+def continuous_validator(value, minimum, maximum):
+    if not minimum <= value <= maximum:
+        raise ValueError("{} violates imits {}".format(value, (
+            minimum, maximum)), value, minimum, maximum)
+    else:
+        return value

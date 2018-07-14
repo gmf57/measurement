@@ -10,7 +10,8 @@ import os
 from git import Repo
 import numpy as np
 import measurement
-from measurement.measurements.callables import Getter
+from typing import Sequence
+from measurement.measurements.callables import Getter, Sweep
 from measurement.measurements.measurement import Measurement
 
 
@@ -18,17 +19,25 @@ class DataSet(object):
     """A collection of DataArray
 
     Contains a DataArray for each recorded parameter in a measurement.
-
-    Should DataSet be a namedtuple or ordered dict?
     """
 
-    def __init__(self, measure, shape):
+    def __init__(self,
+                 sweeps: Sequence[Sweep],
+                 getters: Sequence[Getter],
+                 measurements: Sequence[Measurement],
+                 shape):
         """
         """
-        self.measure = measure
-        self.shape = shape
         self._timestamp = datetime.now()
         self.metadata = self.get_metadata()
+        for getter in getters:
+            setattr(self, getter.name,
+                    DataArray(
+                        np.full(shape, np.nan), getter.name, getter.units))
+        for m in measurements:
+            setattr(self, m.name, [])
+        for sweep in sweeps:
+            setattr(self, sweep.name, [val for val in sweep.vals])
 
     def __str__(self):
         return "<{} {}>".format(self.__class__.__name__, self.filename)
@@ -36,17 +45,13 @@ class DataSet(object):
     def __repr__(self):
         return str(self)
 
-    def add(self, data_array, name=None):
-        """Add a DataArray to the DataSet
-        """
-        # Re-name data_array in place so the names always match
-        if name:
-            data_array.name = name
-        if hasattr(self, data_array.name):
-            raise AttributeError("{} {} already has an attribute {}".format(
-                self.__class__.__name__, self.name, data_array.name))
+    def add(self, instrument, attr, shape):
+        """Add a data set for a particualr attribute on an instrument."""
+        if hasattr(self, instrument.name):
+            setattr(self, instrument.name + attr,
+                    DataArray(np.full(shape, np.nan)))  # Units?
         else:
-            setattr(self, data_array.name, data_array)
+            setattr(self, instrument.name, object())
 
     def append(self, data):
         """Append a new data."""
@@ -82,17 +87,12 @@ class DataSet(object):
         return self._filename
 
     @classmethod
-    def from_measure(cls, measure):
-        """Create a dataset designed to store parameters in a Getter."""
-        data_set = cls(measure)
-        for call in measure:
-            if isinstance(call, Getter):
-                data_set.add(
-                    DataArray(
-                        np.full(measure.shape, np.nan), call.name, call.units))
-            if isinstance(call, Measurement):
-                setattr(data_set, call.__class__.__name__, [])
-        return data_set
+    def from_measure(cls, sweeps, measure, size):
+        """Parse a measure into getters and measurements."""
+        getters = (call for call in measure if isinstance(call, Getter))
+        measurements = (call for call in measure
+                        if isinstance(call, Measurement))
+        return cls(sweeps, getters, measurements, size)
 
 
 class TextDataSet(DataSet):

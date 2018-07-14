@@ -117,6 +117,19 @@ class Measurement(object):
         return inst
 
 
+class NamedMeasurement(type):
+    """Generate a new Measurement class with a name.
+
+    The idea is that this works like collections.nameduple. It generates
+    an object that behaves like a Measurement but has a name (and what else)
+    """
+
+    def __init__(self, name, *args, **kwargs):
+        """
+        """
+        pass
+
+
 class MeasureTime(Measurement):
     """Record a set of parameters periodically over a period of time.
 

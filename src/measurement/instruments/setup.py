@@ -21,4 +21,5 @@ class Setup(Loadable):
 
     def close(self):
         """Close the instruments"""
-        pass
+        for inst in self.instruments:
+            inst.close()

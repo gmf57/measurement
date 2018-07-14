@@ -5,6 +5,7 @@ import os
 
 log = logging.getLogger(__name__)
 
+
 def console_log(level=logging.WARNING):
     ch = logging.StreamHandler()
     ch.setLevel(level)
@@ -13,6 +14,7 @@ def console_log(level=logging.WARNING):
     ch.setFormatter(formatter)
     return ch
 
+
 def file_log(filename, level=logging.INFO):
     ch = logging.FileHandler(filename)
     ch.setLevel(level)
@@ -20,9 +22,14 @@ def file_log(filename, level=logging.INFO):
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
     return ch
-    
-def setup(name = __name__, logger = None, console = True,
-          console_level = "DEBUG", file_level = "INFO", filename = None):
+
+
+def setup(name=__name__,
+          logger=None,
+          console=True,
+          console_level="DEBUG",
+          file_level="INFO",
+          filename=None):
     if logger is None:
         logger = logging.getLogger(name)
     if filename is None:
@@ -35,7 +42,7 @@ def setup(name = __name__, logger = None, console = True,
     logger.info("set up file logging")
     return logger
 
+
 def gen_filename(directory="/Users/Matt/emacs/testing/measurement/logs"):
     stamp = datetime.now().strftime("%Y-%m-%d") + ".log"
     return os.path.join(directory, stamp)
-                         
